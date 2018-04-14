@@ -1,9 +1,8 @@
 extern crate clap;
 
 use std::env;
-use clap::{App, AppSettings, Arg};
-use std::process::Command;
-use std::process::exit;
+use clap::{App, AppSettings, Arg, SubCommand};
+use std::process::{Command, exit};
 use std::path::Path;
 
 #[cfg(target_os = "macos")]
@@ -38,29 +37,38 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
 }
 
 fn main() {
-    let matches = App::new("cargo-ndk")
-        .version("0.1.0")
+    // println!("{:?}", env::args());
+
+    let app_matches = App::new("cargo-ndk")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Brendan Molloy <brendan@bbqsrc.net>")
         .about("Automatically interfaces with the NDK to build Rust libraries.")
         .setting(AppSettings::TrailingVarArg)
-        .arg(Arg::with_name("target")
-            .long("target")
-            .value_name("TARGET")
-            .takes_value(true)
-            .required(true)
-            .help("The triple for the target"))
-        .arg(Arg::with_name("platform")
-            .long("android-platform")
-            .value_name("PLATFORM")
-            .takes_value(true)
-            .required(true)
-            .help("The platform to target (example: 16)"))
-        .arg(Arg::with_name("cargo-args")
-            .value_name("CARGO_ARGS")
-            .required(true)
-            .takes_value(true)
-            .multiple(true))
+        .bin_name("cargo")
+        .subcommand(SubCommand::with_name("ndk")
+            .arg(Arg::with_name("target")
+                .long("target")
+                .value_name("TARGET")
+                .takes_value(true)
+                .required(true)
+                .help("The triple for the target"))
+            .arg(Arg::with_name("platform")
+                .long("android-platform")
+                .value_name("PLATFORM")
+                .takes_value(true)
+                .required(true)
+                .help("The platform to target (example: 16)"))
+            .arg(Arg::with_name("cargo-args")
+                .value_name("CARGO_ARGS")
+                .required(true)
+                .takes_value(true)
+                .multiple(true))
+        )
         .get_matches();
+
+    let matches = app_matches
+        .subcommand_matches("ndk")
+        .expect("ndk matches must be found");
 
     let ndk_home = match env::var_os("NDK_HOME") {
         Some(v) => v,
@@ -70,9 +78,11 @@ fn main() {
         }
     };
 
-    let triple = matches.value_of("target").unwrap();
-    let platform = matches.value_of("platform").unwrap();
-    let cargo_args: Vec<&str> = matches.values_of("cargo-args").unwrap().collect();
+    let triple = matches.value_of("target").expect("Target not to be null");
+    let platform = matches.value_of("platform").expect("Platform not to be null");
+    let cargo_args: Vec<&str> = matches.values_of("cargo-args")
+        .expect("Cargo-args to not be null")
+        .collect();
 
     let target_ar = Path::new(&ndk_home)
         .join(toolchain_suffix(&triple, &ARCH, "ar"));
