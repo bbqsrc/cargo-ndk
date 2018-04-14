@@ -6,10 +6,17 @@ use std::process::Command;
 use std::process::exit;
 use std::path::Path;
 
+#[cfg(target_os = "macos")]
+const ARCH: &'static str = "darwin-x86_64";
+#[cfg(target_os = "linux")]
+const ARCH: &'static str = "linux-x86_64";
+
 fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> String {
     let toolchain_triple = match triple {
         "armv7-linux-androideabi" => "arm-linux-androideabi",
-        _ => panic!("Unhandled triple")
+        "i686-linux-android" => "x86",
+        "x86_64-linux-android" => "x86_64",
+        _ => triple
     };
 
     format!("toolchains/{}-4.9/prebuilt/{}/bin/{}-{}", toolchain_triple, arch, toolchain_triple, bin)
@@ -19,7 +26,9 @@ fn platform_suffix(triple: &str, platform: &str) -> String {
     let arch: &str = triple.split("-").collect::<Vec<&str>>()[0];
     let toolchain_arch = match arch {
         "armv7" => "arm",
-        _ => panic!("Unhandled arch")
+        "i686" => "x86",
+        "aarch64" => "arm64",
+        _ => arch
     };
     format!("platforms/android-{}/arch-{}", platform, toolchain_arch)
 }
@@ -64,12 +73,11 @@ fn main() {
     let triple = matches.value_of("target").unwrap();
     let platform = matches.value_of("platform").unwrap();
     let cargo_args: Vec<&str> = matches.values_of("cargo-args").unwrap().collect();
-    let arch = "darwin-x86_64";
 
     let target_ar = Path::new(&ndk_home)
-        .join(toolchain_suffix(&triple, &arch, "ar"));
+        .join(toolchain_suffix(&triple, &ARCH, "ar"));
     let target_linker = Path::new(&ndk_home)
-        .join(toolchain_suffix(&triple, &arch, "gcc"));
+        .join(toolchain_suffix(&triple, &ARCH, "gcc"));
     let target_sysroot = Path::new(&ndk_home)
         .join(platform_suffix(&triple, &platform));
     let target_rustflags = format!("-Clink-arg=--sysroot={}", target_sysroot.to_str().unwrap());
