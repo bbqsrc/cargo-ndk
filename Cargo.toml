@@ -2,6 +2,14 @@
 name = "cargo-ndk"
 version = "0.1.0"
 authors = ["Brendan Molloy <brendan@technocreatives.com>"]
+repository = "https://github.com/bbqsrc/cargo-ndk"
+homepage = "https://github.com/bbqsrc/cargo-ndk"
+license = "ISC"
+license-file = "LICENSE"
+description = "Makes building Rust libraries for Android easy"
+keywords = ["ndk", "cargo", "android", "build"]
+categories = ["command-line-utilities", "config", "os", "development-tools::cargo-plugins", "development-tools::build-utils"]
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 clap = "2.31.2"
