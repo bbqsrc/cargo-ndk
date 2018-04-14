@@ -18,7 +18,12 @@ fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> String {
         _ => triple
     };
 
-    format!("toolchains/{}-4.9/prebuilt/{}/bin/{}-{}", toolchain_triple, arch, toolchain_triple, bin)
+    let tool_triple = match triple {
+        "armv7-linux-androideabi" => "arm-linux-androideabi",
+        _ => triple
+    };
+
+    format!("toolchains/{}-4.9/prebuilt/{}/bin/{}-{}", toolchain_triple, arch, tool_triple, bin)
 }
 
 fn platform_suffix(triple: &str, platform: &str) -> String {
