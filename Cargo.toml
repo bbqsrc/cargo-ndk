@@ -12,4 +12,4 @@ categories = ["command-line-utilities", "config", "os", "development-tools::carg
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-clap = "2.31.2"
+clap = "2.32.0"
