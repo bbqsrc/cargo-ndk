@@ -10,7 +10,7 @@ const ARCH: &'static str = "darwin-x86_64";
 #[cfg(target_os = "linux")]
 const ARCH: &'static str = "linux-x86_64";
 
-fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> String {
+fn triples(triple: &str) -> (String, String) {
     let toolchain_triple = match triple {
         "armv7-linux-androideabi" => "arm-linux-androideabi",
         "i686-linux-android" => "x86",
@@ -23,7 +23,22 @@ fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> String {
         _ => triple
     };
 
+    (toolchain_triple.to_string(), tool_triple.to_string())
+}
+
+fn toolchain_sysroot(triple: &str, arch: &str) -> String {
+    let (toolchain_triple, tool_triple) = triples(triple);
+    format!("toolchains/{}-4.9/prebuilt/{}/{}/bin", toolchain_triple, arch, tool_triple)
+}
+
+fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> String {
+    let (toolchain_triple, tool_triple) = triples(triple);
     format!("toolchains/{}-4.9/prebuilt/{}/bin/{}-{}", toolchain_triple, arch, tool_triple, bin)
+}
+
+fn toolchain_libs_path(triple: &str, arch: &str) -> String {
+    let (toolchain_triple, tool_triple) = triples(triple);
+    format!("toolchains/{}-4.9/prebuilt/{}/lib/gcc/{}/4.9.x", toolchain_triple, arch, tool_triple)
 }
 
 fn platform_suffix(triple: &str, platform: &str) -> String {
@@ -42,8 +57,6 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
 }
 
 fn main() {
-    // println!("{:?}", env::args());
-
     let app_matches = App::new("cargo-ndk")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Brendan Molloy <brendan@bbqsrc.net>")
@@ -95,9 +108,16 @@ fn main() {
         .join(toolchain_suffix(&triple, &ARCH, "gcc"));
     let target_sysroot = Path::new(&ndk_home)
         .join(platform_suffix(&triple, &platform));
-    let target_rustflags = format!("-Clink-arg=--sysroot={}", target_sysroot.to_str().unwrap());
+    let target_path = format!("{}:{}",
+        Path::new(&ndk_home).join(toolchain_sysroot(&triple, &ARCH)).to_str().unwrap(),
+        env::var_os("PATH").unwrap().to_str().unwrap());
+    let target_tool_libs = Path::new(&ndk_home).join(toolchain_libs_path(&triple, &ARCH));
+    let target_rustflags = format!("-Clink-arg=--sysroot={} -Clink-arg=-L{}",
+        target_sysroot.to_str().unwrap(),
+        target_tool_libs.to_str().unwrap());
 
     let status = Command::new("cargo")
+        .env("PATH", &target_path)
         .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
         .env(cargo_env_target_cfg(&triple, "rustflags"), &target_rustflags)
