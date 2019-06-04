@@ -5,6 +5,8 @@ the triples used in the Rust world to the triples used in the Android world.
 
 For a more manual approach, see [this blog from Mozilla](https://mozilla.github.io/firefox-browser-architecture/experiments/2017-09-21-rust-on-android.html).
 
+**NOTE: Minimum supported NDK version is r19c.**
+
 ### Supported triples
 
 - `aarch64-linux-android`
