@@ -1,27 +1,40 @@
- use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 #[cfg(target_os = "macos")]
 const ARCH: &'static str = "darwin-x86_64";
 #[cfg(target_os = "linux")]
 const ARCH: &'static str = "linux-x86_64";
+#[cfg(target_os = "windows")]
+const ARCH: &'static str = "windows-x86_64";
 
-fn toolchain_suffix(triple: &str, arch: &str, platform: &str, bin: &str) -> String {
+#[cfg(target_os = "windows")]
+const EXT: &'static str = ".cmd";
+#[cfg(not(target_os = "windows"))]
+const EXT: &'static str = "";
+
+fn toolchain_suffix(triple: &str, arch: &str, platform: &str, bin: &str) -> PathBuf {
     let tool_triple = match triple {
         "arm-linux-androideabi" => "armv7a-linux-androideabi",
         "armv7-linux-androideabi" => "armv7a-linux-androideabi",
         _ => triple,
     };
 
-    format!(
-        "toolchains/llvm/prebuilt/{}/bin/{}{}-{}",
-        arch, tool_triple, platform, bin
-    )
+    [
+        "toolchains",
+        "llvm",
+        "prebuilt",
+        arch,
+        "bin",
+        &format!("{}{}-{}{}", tool_triple, platform, bin, EXT),
+    ]
+    .iter()
+    .collect()
 }
 
-fn platform_suffix(triple: &str, platform: &str) -> String {
+fn platform_suffix(triple: &str, platform: &str) -> PathBuf {
     let arch: &str = triple.split("-").collect::<Vec<&str>>()[0];
     let toolchain_arch = match arch {
         "armv7" => "arm",
@@ -29,14 +42,28 @@ fn platform_suffix(triple: &str, platform: &str) -> String {
         "aarch64" => "arm64",
         _ => arch,
     };
-    format!("platforms/android-{}/arch-{}", platform, toolchain_arch)
+    [
+        "platforms",
+        &format!("android-{}", platform),
+        &format!("arch-{}", toolchain_arch),
+    ]
+    .iter()
+    .collect()
 }
 
-fn arm_unwind_sysroot(arch: &str) -> String {
-    format!(
-        "toolchains/llvm/prebuilt/{}/sysroot/usr/lib/arm-linux-androideabi",
-        arch
-    )
+fn arm_unwind_sysroot(arch: &str) -> PathBuf {
+    [
+        "toolchains",
+        "llvm",
+        "prebuilt",
+        arch,
+        "sysroot",
+        "usr",
+        "lib",
+        "arm-linux-androideabi",
+    ]
+    .iter()
+    .collect()
 }
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
