@@ -18,8 +18,7 @@ For a more manual approach, see [this blog from Mozilla](https://mozilla.github.
 
 - Linux
 - macOS
-
-There is not fundamental reason Windows can't be supported; pull requests welcomed warmly!
+- Windows
 
 ## Usage
 
