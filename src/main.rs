@@ -102,18 +102,23 @@ fn main() {
     env_logger::init();
 
     let app_matches = App::new("cargo-ndk")
-        .version(env!("CARGO_PKG_VERSION"))
-        .author("Brendan Molloy <brendan@bbqsrc.net>")
-        .about("Automatically interfaces with the NDK to build Rust libraries. Minimum compatible NDK version: r19c.")
-        .setting(AppSettings::TrailingVarArg)
         .bin_name("cargo")
         .subcommand(SubCommand::with_name("ndk")
+            .setting(AppSettings::TrailingVarArg)
+            .version(env!("CARGO_PKG_VERSION"))
+            .author("Brendan Molloy <brendan@bbqsrc.net>")
+            .about("Automatically interfaces with the NDK to build Rust libraries. Minimum compatible NDK version: r19c.")
             .arg(Arg::with_name("target")
                 .long("target")
                 .value_name("TARGET")
                 .takes_value(true)
                 .required(true)
-                .help("The triple for the target"))
+                .help("The triple for the target")
+                .long_help("The following targets are supported:
+  * aarch64-linux-android
+  * armv7-linux-androideabi
+  * i686-linux-android
+  * x86_64-linux-android"))
             .arg(Arg::with_name("platform")
                 .long("android-platform")
                 .value_name("PLATFORM")
