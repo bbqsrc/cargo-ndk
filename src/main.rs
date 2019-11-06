@@ -15,7 +15,7 @@ const EXT: &'static str = ".cmd";
 #[cfg(not(target_os = "windows"))]
 const EXT: &'static str = "";
 
-fn toolchain_suffix(triple: &str, arch: &str, platform: &str, bin: &str) -> PathBuf {
+fn clang_suffix(triple: &str, arch: &str, platform: &str) -> PathBuf {
     let tool_triple = match triple {
         "arm-linux-androideabi" => "armv7a-linux-androideabi",
         "armv7-linux-androideabi" => "armv7a-linux-androideabi",
@@ -28,20 +28,48 @@ fn toolchain_suffix(triple: &str, arch: &str, platform: &str, bin: &str) -> Path
         "prebuilt",
         arch,
         "bin",
-        &format!("{}{}-{}{}", tool_triple, platform, bin, EXT),
+        &format!("{}{}-clang{}", tool_triple, platform, EXT),
     ]
     .iter()
     .collect()
 }
 
-fn platform_suffix(triple: &str, platform: &str) -> PathBuf {
-    let arch: &str = triple.split("-").collect::<Vec<&str>>()[0];
-    let toolchain_arch = match arch {
+fn toolchain_triple<'a>(triple: &'a str) -> &'a str {
+    match triple {
+        "armv7-linux-androideabi" => "arm-linux-androideabi",
+        _ => triple,
+    }
+}
+
+fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> PathBuf {
+    [
+        "toolchains",
+        "llvm",
+        "prebuilt",
+        arch,
+        "bin",
+        &format!("{}-{}{}", toolchain_triple(triple), bin, EXT),
+    ]
+    .iter()
+    .collect()
+}
+
+fn toolchain_arch<'a>(arch: &'a str) -> &'a str {
+    match arch {
         "armv7" => "arm",
         "i686" => "x86",
         "aarch64" => "arm64",
         _ => arch,
-    };
+    }
+}
+
+fn arch_from_triple<'a>(triple: &'a str) -> &'a str {
+    triple.split("-").next().unwrap_or("")
+}
+
+fn platform_suffix(triple: &str, platform: &str) -> PathBuf {
+    let arch = arch_from_triple(triple);
+    let toolchain_arch = toolchain_arch(arch);
     [
         "platforms",
         &format!("android-{}", platform),
@@ -71,6 +99,8 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
 }
 
 fn main() {
+    env_logger::init();
+
     let app_matches = App::new("cargo-ndk")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Brendan Molloy <brendan@bbqsrc.net>")
@@ -123,9 +153,8 @@ fn main() {
         .expect("Cargo-args to not be null")
         .collect();
 
-    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, &platform, "ar"));
-    let target_linker =
-        Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, &platform, "clang"));
+    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
+    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform));
     let target_sysroot = Path::new(&ndk_home).join(platform_suffix(&triple, &platform));
     let mut target_rustflags = format!("-Clink-arg=--sysroot={}", target_sysroot.to_str().unwrap());
 
@@ -140,7 +169,16 @@ fn main() {
         ));
     }
 
+    let cc_key = format!("CC_{}", &triple);
+    let ar_key = format!("AR_{}", &triple);
+
+    log::debug!("ar: {:?}", &target_ar);
+    log::debug!("linker: {:?}", &target_linker);
+    log::debug!("rustflags: {:?}", &target_rustflags);
+
     let status = Command::new("cargo")
+        .env(ar_key, &target_ar)
+        .env(cc_key, &target_linker)
         .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
         .env(

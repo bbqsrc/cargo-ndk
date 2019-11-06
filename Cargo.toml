@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ndk"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"
@@ -16,3 +16,5 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 clap = "2.33.0"
+log = "0.4.8"
+env_logger = "0.7.1"
