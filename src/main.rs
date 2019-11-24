@@ -114,22 +114,21 @@ fn main() {
                 .takes_value(true)
                 .required(true)
                 .help("The triple for the target")
-                .long_help("The following targets are supported:
-  * aarch64-linux-android
-  * armv7-linux-androideabi
-  * i686-linux-android
-  * x86_64-linux-android"))
+                .possible_values(&["aarch64-linux-android", "armv7-linux-androideabi", "i686-linux-android", "x86_64-linux-android"])
+            )
             .arg(Arg::with_name("platform")
                 .long("android-platform")
                 .value_name("PLATFORM")
                 .takes_value(true)
                 .required(true)
-                .help("The platform to target (example: 16)"))
+                .help("The platform to target (example: 16)")
+            )
             .arg(Arg::with_name("cargo-args")
                 .value_name("CARGO_ARGS")
                 .required(true)
                 .takes_value(true)
-                .multiple(true))
+                .multiple(true)
+            )
         )
         .get_matches();
 
