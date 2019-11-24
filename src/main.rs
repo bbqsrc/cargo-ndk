@@ -64,7 +64,7 @@ fn toolchain_arch(arch: &str) -> &str {
 }
 
 fn arch_from_triple(triple: &str) -> &str {
-    triple.split("-").next().unwrap_or("")
+    triple.split('-').next().unwrap_or("")
 }
 
 fn platform_suffix(triple: &str, platform: &str) -> PathBuf {
