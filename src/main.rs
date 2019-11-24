@@ -4,16 +4,16 @@ use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 #[cfg(target_os = "macos")]
-const ARCH: &'static str = "darwin-x86_64";
+const ARCH: &str = "darwin-x86_64";
 #[cfg(target_os = "linux")]
-const ARCH: &'static str = "linux-x86_64";
+const ARCH: &str = "linux-x86_64";
 #[cfg(target_os = "windows")]
-const ARCH: &'static str = "windows-x86_64";
+const ARCH: &str = "windows-x86_64";
 
 #[cfg(target_os = "windows")]
-const EXT: &'static str = ".cmd";
+const EXT: &str = ".cmd";
 #[cfg(not(target_os = "windows"))]
-const EXT: &'static str = "";
+const EXT: &str = "";
 
 fn clang_suffix(triple: &str, arch: &str, platform: &str) -> PathBuf {
     let tool_triple = match triple {
@@ -34,7 +34,7 @@ fn clang_suffix(triple: &str, arch: &str, platform: &str) -> PathBuf {
     .collect()
 }
 
-fn toolchain_triple<'a>(triple: &'a str) -> &'a str {
+fn toolchain_triple(triple: &str) -> &str {
     match triple {
         "armv7-linux-androideabi" => "arm-linux-androideabi",
         _ => triple,
@@ -54,7 +54,7 @@ fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> PathBuf {
     .collect()
 }
 
-fn toolchain_arch<'a>(arch: &'a str) -> &'a str {
+fn toolchain_arch(arch: &str) -> &str {
     match arch {
         "armv7" => "arm",
         "i686" => "x86",
@@ -63,7 +63,7 @@ fn toolchain_arch<'a>(arch: &'a str) -> &'a str {
     }
 }
 
-fn arch_from_triple<'a>(triple: &'a str) -> &'a str {
+fn arch_from_triple(triple: &str) -> &str {
     triple.split("-").next().unwrap_or("")
 }
 
