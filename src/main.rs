@@ -1,5 +1,6 @@
 use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -54,48 +55,38 @@ fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> PathBuf {
     .collect()
 }
 
-fn toolchain_arch<'a>(arch: &'a str) -> &'a str {
-    match arch {
-        "armv7" => "arm",
-        "i686" => "x86",
-        "aarch64" => "arm64",
-        _ => arch,
-    }
-}
-
-fn arch_from_triple<'a>(triple: &'a str) -> &'a str {
-    triple.split("-").next().unwrap_or("")
-}
-
-fn platform_suffix(triple: &str, platform: &str) -> PathBuf {
-    let arch = arch_from_triple(triple);
-    let toolchain_arch = toolchain_arch(arch);
-    [
-        "platforms",
-        &format!("android-{}", platform),
-        &format!("arch-{}", toolchain_arch),
-    ]
-    .iter()
-    .collect()
-}
-
-fn arm_unwind_sysroot(arch: &str) -> PathBuf {
-    [
-        "toolchains",
-        "llvm",
-        "prebuilt",
-        arch,
-        "sysroot",
-        "usr",
-        "lib",
-        "arm-linux-androideabi",
-    ]
-    .iter()
-    .collect()
-}
-
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace("-", "_"), key).to_uppercase()
+}
+
+fn run(
+    dir: &Path,
+    ndk_home: &OsString,
+    triple: &str,
+    platform: &str,
+    cargo_args: Vec<&str>,
+    libs: Vec<PathBuf>,
+) -> std::process::ExitStatus {
+    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
+    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform));
+
+    let cc_key = format!("CC_{}", &triple);
+    let ar_key = format!("AR_{}", &triple);
+
+    log::debug!("ar: {:?}", &target_ar);
+    log::debug!("linker: {:?}", &target_linker);
+
+    Command::new("cargo")
+        .current_dir(dir)
+        .env(ar_key, &target_ar)
+        .env(cc_key, &target_linker)
+        .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
+        .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
+        .args(cargo_args)
+        .arg("--target")
+        .arg(&triple)
+        .status()
+        .expect("Success")
 }
 
 fn main() {
@@ -129,7 +120,8 @@ fn main() {
                 .value_name("CARGO_ARGS")
                 .required(true)
                 .takes_value(true)
-                .multiple(true))
+                .multiple(true)
+            )
         )
         .get_matches();
 
@@ -158,43 +150,14 @@ fn main() {
         .expect("Cargo-args to not be null")
         .collect();
 
-    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform));
-    let target_sysroot = Path::new(&ndk_home).join(platform_suffix(&triple, &platform));
-    let mut target_rustflags = format!("-Clink-arg=--sysroot={}", target_sysroot.to_str().unwrap());
-
-    if triple.starts_with("arm") {
-        target_rustflags.push_str(" ");
-        target_rustflags.push_str(&format!(
-            "-Clink-arg=-L{}",
-            Path::new(&ndk_home)
-                .join(arm_unwind_sysroot(&ARCH))
-                .to_str()
-                .unwrap()
-        ));
-    }
-
-    let cc_key = format!("CC_{}", &triple);
-    let ar_key = format!("AR_{}", &triple);
-
-    log::debug!("ar: {:?}", &target_ar);
-    log::debug!("linker: {:?}", &target_linker);
-    log::debug!("rustflags: {:?}", &target_rustflags);
-
-    let status = Command::new("cargo")
-        .env(ar_key, &target_ar)
-        .env(cc_key, &target_linker)
-        .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
-        .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
-        .env(
-            cargo_env_target_cfg(&triple, "rustflags"),
-            &target_rustflags,
-        )
-        .args(cargo_args)
-        .arg("--target")
-        .arg(&triple)
-        .status()
-        .expect("Success");
+    let status = run(
+        &std::env::current_dir().unwrap(),
+        &ndk_home,
+        triple,
+        platform,
+        cargo_args,
+        vec![],
+    );
 
     exit(status.code().unwrap_or(-1));
 }

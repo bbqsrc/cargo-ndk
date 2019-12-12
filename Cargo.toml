@@ -1,12 +1,12 @@
 [package]
 name = "cargo-ndk"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"
 homepage = "https://github.com/bbqsrc/cargo-ndk"
 license = "MIT/Apache-2.0"
-description = "Makes building Rust libraries for Android easy"
+description = "Makes building Rust libraries for Android simpler"
 keywords = ["ndk", "cargo", "android", "build"]
 categories = ["command-line-utilities", "config", "os", "development-tools::cargo-plugins", "development-tools::build-utils"]
 edition = "2018"
