@@ -1,15 +1,29 @@
-# cargo-ndk
+# cargo-ndk - Build Rust code for Android
 
-Use `cargo` with the NDK without too much hassle. Handles finding the correct linkers and converting between
-the triples used in the Rust world to the triples used in the Android world.
+This cargo extension handles all the environment configuration needed for successfully building libraries
+for Android from a Rust codebase.
+
+## Installing
 
 ```
 cargo install cargo-ndk
 ```
 
-For a more manual approach, see [this blog from Mozilla](https://mozilla.github.io/firefox-browser-architecture/experiments/2017-09-21-rust-on-android.html).
+## Usage
 
-**NOTE: Minimum supported NDK version is r19c.**
+You'll also need the NDK installed somewhere, and the path to it exported as the `ANDROID_NDK_HOME` environment variable. If you use
+Android Studio and have `ANDROID_SDK_HOME` defined, `cargo ndk` is smart enough to detect the `ndk-bundle` subdirectory as well. 
+
+Building is very similar to any other Rust project, with the addition of the `--platform` flag for selecting which
+Android API platform to target. By default, `21` is a good choice.
+
+```
+cargo ndk --platform 21 --target x86_64-linux-android build
+```
+
+Add `--release` for a release build, as per usual.
+
+**NOTE: Minimum supported NDK version is r19c. Has been tested up to r21.**
 
 ### Supported triples
 
@@ -24,26 +38,9 @@ For a more manual approach, see [this blog from Mozilla](https://mozilla.github.
 - macOS
 - Windows
 
-## Usage
+## Similar projects
 
-First you'll need to install all the toolchains you intend to use. Simplest way is with the following:
-
-```
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android
-```
-
-You'll also need the NDK installed somewhere, and the path to it exported as the `NDK_HOME` environment variable. On macOS with Android Studio, this is usually `$HOME/Library/Android/sdk/ndk-bundle`. On Linux, it's somewhere in `$HOME/.android` (pull requests accepted with actual location).
-
-Install the plugin with `cargo install cargo-ndk`.
-
-Then, simply run your usual cargo commands prefixed with `cargo ndk --target <Android triplet> --android-platform <API> --`, where
-API is the Android API platform version to target (for example, 16). Note the `--`, it is required to pass commands to `cargo` and not to the `cargo-ndk` plugin.
-
-So, to do an ordinary release build for `aarch64` against API 25, you'd run:
-
-```
-cargo ndk --target aarch64-linux-android --android-platform 25 -- build --release 
-```
+* [cargo-lipo](https://github.com/TimNN/cargo-lipo) - for building iOS/macOS universal Rust libraries
 
 ## License
 
