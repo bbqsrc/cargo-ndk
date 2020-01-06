@@ -1,8 +1,9 @@
-use clap::{App, AppSettings, Arg, SubCommand};
 use std::env;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
+
+use clap::{App, AppSettings, Arg};
 
 #[cfg(target_os = "macos")]
 const ARCH: &'static str = "darwin-x86_64";
