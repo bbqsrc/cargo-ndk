@@ -46,7 +46,7 @@ Add `--release` for a release build, as per usual.
 
 ## Similar projects
 
-* [cargo-lipo](https://github.com/TimNN/cargo-lipo) - for building iOS/macOS universal Rust libraries
+* [cargo-lipo](https://github.com/TimNN/cargo-lipo) - for building iOS universal Rust libraries
 
 ## License
 
