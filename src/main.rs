@@ -94,54 +94,62 @@ fn run(
 fn main() {
     env_logger::init();
 
-    let app_matches = App::new("cargo-ndk")
-        .bin_name("cargo")
-        .subcommand(SubCommand::with_name("ndk")
-            .setting(AppSettings::TrailingVarArg)
-            .version(env!("CARGO_PKG_VERSION"))
-            .author("Brendan Molloy <brendan@bbqsrc.net>")
-            .about("Automatically interfaces with the NDK to build Rust libraries. Minimum compatible NDK version: r19c.")
-            .arg(Arg::with_name("target")
-                .long("target")
-                .value_name("TARGET")
-                .takes_value(true)
-                .required(true)
-                .help("The triple for the target")
-                .long_help("The following targets are supported:
+    if env::var("CARGO").is_err() {
+        eprintln!("This binary may only be called via `cargo ndk`.");
+        exit(1);
+    }
+
+    // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
+    // and $ANDROID_SDK_HOME/ndk-bundle as this is how Android Studio configures the world
+    let ndk_home = env::var_os("NDK_HOME")
+        .or_else(|| env::var_os("ANDROID_NDK_HOME"))
+        .or_else(|| {
+            env::var_os("ANDROID_SDK_HOME")
+                .as_ref()
+                .map(|x| Path::new(x).join("ndk-bundle").into())
+        });
+
+    let ndk_home = match ndk_home {
+        Some(v) => v,
+        None => {
+            eprintln!("Could not find any NDK.");
+            eprintln!(
+                "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory."
+            );
+            exit(1);
+        }
+    };
+
+    let matches = App::new("cargo-ndk")
+        .bin_name("cargo-ndk")
+        .setting(AppSettings::TrailingVarArg)
+        .version(env!("CARGO_PKG_VERSION"))
+        .author("Brendan Molloy <brendan@bbqsrc.net>")
+        .about("Automatically interfaces with the NDK to build Rust libraries. Minimum compatible NDK version: r19c.")
+        .arg(Arg::with_name("target")
+            .long("target")
+            .value_name("TARGET")
+            .takes_value(true)
+            .required(true)
+            .help("The triple for the target")
+            .long_help("The following targets are supported:
   * aarch64-linux-android
   * armv7-linux-androideabi
   * i686-linux-android
   * x86_64-linux-android"))
-            .arg(Arg::with_name("platform")
-                .long("android-platform")
-                .value_name("PLATFORM")
-                .takes_value(true)
-                .required(true)
-                .help("The platform to target (example: 16)"))
-            .arg(Arg::with_name("cargo-args")
-                .value_name("CARGO_ARGS")
-                .required(true)
-                .takes_value(true)
-                .multiple(true)
-            )
+        .arg(Arg::with_name("platform")
+            .long("platform")
+            .alias("android-platform")
+            .value_name("PLATFORM")
+            .required(true)
+            .help("The platform to target"))
+        .arg(Arg::with_name("cargo-args")
+            .value_name("CARGO_ARGS")
+            .required(true)
+            .takes_value(true)
+            .multiple(true)
         )
-        .get_matches();
-
-    let matches = match app_matches.subcommand_matches("ndk") {
-        Some(v) => v,
-        None => {
-            eprintln!("This binary may only be called via `cargo ndk`.");
-            exit(1);
-        }
-    };
-
-    let ndk_home = match env::var_os("NDK_HOME") {
-        Some(v) => v,
-        None => {
-            eprintln!("No NDK_HOME set.");
-            exit(1);
-        }
-    };
+        .get_matches_from(env::args().skip(1));
 
     let triple = matches.value_of("target").expect("Target not to be null");
     let platform = matches
@@ -153,7 +161,7 @@ fn main() {
         .collect();
 
     let status = run(
-        &std::env::current_dir().unwrap(),
+        &std::env::current_dir().expect("current directory could not be resolved"),
         &ndk_home,
         triple,
         platform,
