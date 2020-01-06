@@ -72,11 +72,13 @@ fn run(
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
+    let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     log::debug!("ar: {:?}", &target_ar);
     log::debug!("linker: {:?}", &target_linker);
+    log::debug!("cargo: {:?}", &cargo_bin);
 
-    Command::new("cargo")
+    Command::new(cargo_bin)
         .current_dir(dir)
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
@@ -86,7 +88,7 @@ fn run(
         .arg("--target")
         .arg(&triple)
         .status()
-        .expect("Success")
+        .expect("cargo crashed")
 }
 
 fn main() {
