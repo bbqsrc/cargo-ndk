@@ -66,7 +66,6 @@ fn run(
     triple: &str,
     platform: &str,
     cargo_args: Vec<&str>,
-    libs: Vec<PathBuf>,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
     let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform));
@@ -157,7 +156,6 @@ fn main() {
         triple,
         platform,
         cargo_args,
-        vec![],
     );
 
     exit(status.code().unwrap_or(-1));
