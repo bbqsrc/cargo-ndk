@@ -101,8 +101,8 @@ fn main() {
 
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk-bundle as this is how Android Studio configures the world
-    let ndk_home = env::var_os("NDK_HOME")
-        .or_else(|| env::var_os("ANDROID_NDK_HOME"))
+    let ndk_home = env::var_os("ANDROID_NDK_HOME")
+        .or_else(|| env::var_os("NDK_HOME"))
         .or_else(|| {
             env::var_os("ANDROID_SDK_HOME")
                 .as_ref()
