@@ -9,6 +9,12 @@ for Android from a Rust codebase.
 cargo install cargo-ndk
 ```
 
+You'll also need to install all the toolchains you intend to use. Simplest way is with the following:
+
+```
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android 
+```
+
 ## Usage
 
 You'll also need the NDK installed somewhere, and the path to it exported as the `ANDROID_NDK_HOME` environment variable. If you use
