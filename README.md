@@ -56,3 +56,7 @@ This project is licensed under either of
  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+---
+
+[Uyghurs are under attack in Xinjiang.](https://foreignpolicy.com/2019/12/30/xinjiang-crackdown-uighur-2019-what-happened/) The Chinese government is placing millions of people into indoctrination camps and engaging in forced labour.
