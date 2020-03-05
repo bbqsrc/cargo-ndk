@@ -17,7 +17,7 @@ const EXT: &str = ".cmd";
 #[cfg(not(target_os = "windows"))]
 const EXT: &str = "";
 
-fn clang_suffix(triple: &str, arch: &str, platform: &str) -> PathBuf {
+fn clang_suffix(triple: &str, arch: &str, platform: &str, postfix: &str) -> PathBuf {
     let tool_triple = match triple {
         "arm-linux-androideabi" => "armv7a-linux-androideabi",
         "armv7-linux-androideabi" => "armv7a-linux-androideabi",
@@ -30,7 +30,7 @@ fn clang_suffix(triple: &str, arch: &str, platform: &str) -> PathBuf {
         "prebuilt",
         arch,
         "bin",
-        &format!("{}{}-clang{}", tool_triple, platform, EXT),
+        &format!("{}{}-clang{}{}", tool_triple, platform, postfix, EXT),
     ]
     .iter()
     .collect()
@@ -68,10 +68,12 @@ fn run(
     cargo_args: Vec<&str>,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform));
+    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform,""));
+    let target_cxx = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform,"++"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
+    let cxx_key = format!("CXX_{}", &triple);
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     log::debug!("ar: {:?}", &target_ar);
@@ -82,6 +84,7 @@ fn run(
         .current_dir(dir)
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
+        .env(cxx_key, &target_cxx)
         .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
         .args(cargo_args)
