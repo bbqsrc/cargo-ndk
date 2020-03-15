@@ -68,8 +68,8 @@ fn run(
     cargo_args: Vec<&str>,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform,""));
-    let target_cxx = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform,"++"));
+    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform, ""));
+    let target_cxx = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, &platform, "++"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
