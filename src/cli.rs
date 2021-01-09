@@ -149,8 +149,7 @@ pub(crate) fn run(args: Vec<String>) {
         config.targets
     };
 
-    let platform = config.platform;
-    let platform = args.platform.unwrap_or_else(|| platform);
+    let platform = args.platform.unwrap_or(config.platform);
 
     if let Some(output_dir) = args.output_dir.as_ref() {
         std::fs::create_dir_all(output_dir).expect("failed to create output directory");
