@@ -13,7 +13,7 @@ struct Args {
     #[options(free, help = "args to be passed to cargo")]
     cargo_args: Vec<String>,
 
-    #[options(help = "triple for the target(s)")]
+    #[options(help = "triple for the target(s)\nSupported: armeabi-v7a arm64-v8a x86 x86_64.")]
     target: Vec<Target>,
 
     #[options(help = "platform (also known as API level)")]
@@ -165,6 +165,7 @@ pub(crate) fn run(args: Vec<String>) {
         log::info!("Copying libraries to {}...", &output_dir.display());
 
         for target in targets {
+            log::trace!("Target: {:?}", &target);
             let arch_output_dir = output_dir.join(target.to_string());
             std::fs::create_dir_all(&arch_output_dir).unwrap();
 
