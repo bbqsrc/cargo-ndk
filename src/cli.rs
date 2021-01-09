@@ -23,6 +23,21 @@ struct Args {
     output_dir: Option<PathBuf>,
 }
 
+fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
+    if ndk_dir.exists() {
+        let mut paths = std::fs::read_dir(&ndk_dir)
+            .ok()?
+            .flat_map(Result::ok)
+            .map(|x| x.path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.reverse();
+        paths.first().cloned()
+    } else {
+        None
+    }
+}
+
 fn derive_ndk_path() -> Option<PathBuf> {
     if let Some(path) = env::var_os("ANDROID_NDK_HOME") {
         return Some(PathBuf::from(path));
@@ -33,32 +48,23 @@ fn derive_ndk_path() -> Option<PathBuf> {
     };
 
     if let Some(sdk_path) = env::var_os("ANDROID_SDK_HOME") {
-        let path = PathBuf::from(sdk_path).join("ndk-bundle");
-
-        if path.exists() {
-            return Some(path);
+        let ndk_path = PathBuf::from(&sdk_path).join("ndk");
+        if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
+            return Some(v);
         }
     };
 
     // Check Android Studio installed directories
     #[cfg(windows)]
-    let base_dir = pathos::user::local_dir();
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let base_dir = pathos::user::data_dir();
+    let base_dir = pathos::user::local_dir().unwrap();
+    #[cfg(target_os = "linux")]
+    let base_dir = pathos::user::data_dir().unwrap();
+    #[cfg(target_os = "macos")]
+    let base_dir = pathos::user::home_dir().unwrap().join("Library");
 
     let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
-    if ndk_dir.exists() {
-        let mut paths = std::fs::read_dir(&ndk_dir)
-            .ok()?
-            .flat_map(Result::ok)
-            .map(|x| x.path())
-            .collect::<Vec<_>>();
-        paths.sort();
-        paths.reverse();
-        return paths.first().cloned();
-    }
-
-    None
+    log::trace!("Default NDK dir: {:?}", &ndk_dir);
+    highest_version_ndk_in_path(&ndk_dir)
 }
 
 fn print_usage() {
