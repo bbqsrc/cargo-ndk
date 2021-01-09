@@ -200,6 +200,13 @@ pub(crate) fn run(args: Vec<String>) {
                 .filter(|x| x.extension() == Some(OsStr::new("so")))
                 .collect::<Vec<_>>();
 
+            if so_files.is_empty() {
+                log::error!("No .so files found in path {:?}", dir);
+                log::error!("Did you set the crate-type in Cargo.toml to include 'cdylib'?");
+                log::error!("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.");
+                std::process::exit(1);
+            }
+
             for so_file in so_files {
                 let dest = arch_output_dir.join(so_file.file_name().unwrap());
                 log::info!("{} -> {}", &so_file.display(), dest.display());
