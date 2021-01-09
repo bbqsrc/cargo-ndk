@@ -1,4 +1,8 @@
-use std::{env, ffi::OsStr, path::PathBuf};
+use std::{
+    env,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use cargo_metadata::MetadataCommand;
 use gumdrop::Options;
@@ -13,7 +17,9 @@ struct Args {
     #[options(free, help = "args to be passed to cargo")]
     cargo_args: Vec<String>,
 
-    #[options(help = "triple for the target(s)\nSupported: armeabi-v7a arm64-v8a x86 x86_64.")]
+    #[options(
+        help = "triple for the target(s)\n                           Supported: armeabi-v7a arm64-v8a x86 x86_64."
+    )]
     target: Vec<Target>,
 
     #[options(help = "platform (also known as API level)")]

@@ -9,7 +9,7 @@ const fn default_platform() -> u8 {
 }
 
 fn default_targets() -> Vec<Target> {
-    vec![Target::ArmeabiV7a, Target::Arm64V8a, Target::X86_64]
+    vec![Target::ArmeabiV7a, Target::Arm64V8a]
 }
 
 #[derive(Debug, Deserialize)]
