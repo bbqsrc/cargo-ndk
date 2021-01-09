@@ -1,7 +1,7 @@
 # cargo-ndk - Build Rust code for Android
 
 This cargo extension handles all the environment configuration needed for successfully building libraries
-for Android from a Rust codebase.
+for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
 
 ## Installing
 
@@ -12,36 +12,36 @@ cargo install cargo-ndk
 You'll also need to install all the toolchains you intend to use. Simplest way is with the following:
 
 ```
-rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android 
+rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    x86_64-linux-android \
+    i686-linux-android
 ```
+
+Modify as necessary for your use case.
 
 ## Usage
 
-You'll also need the NDK installed somewhere, and the path to it exported as the `ANDROID_NDK_HOME` environment variable. If you use
-Android Studio and have `ANDROID_SDK_HOME` defined, `cargo ndk` is smart enough to detect the `ndk-bundle` subdirectory as well. 
+If you have installed the NDK with Android Studio to its default location, `cargo ndk` will automatically detect
+the most recent NDK version and use it. This can be overriden by specifying the path to the NDK root directory in
+the `ANDROID_NDK_HOME` environment variable.
 
-Building is very similar to any other Rust project, with the addition of the `--platform` flag for selecting which
-Android API platform to target. By default, `21` is a good choice.
+### Example: building a library for 32-bit and 64-bit ARM systems
 
 ```
-cargo ndk --platform 21 --target x86_64-linux-android build
+cargo ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release 
 ```
 
-Add `--release` for a release build, as per usual.
+This specifies the Android targets to be built, the output directory to use for placing the `.so` files in the layout
+expected by Android, and then the ordinary flags to be passed to `cargo`.
 
-**NOTE: Minimum supported NDK version is r19c. Has been tested up to r21.**
-
-### Supported triples
-
-- `aarch64-linux-android`
-- `armv7-linux-androideabi`
-- `i686-linux-android`
-- `x86_64-linux-android`
+![Example](./example/example.svg)
 
 ### Supported hosts
 
 - Linux
-- macOS
+- macOS (x86_64 and arm64)
 - Windows
 
 ## Similar projects
