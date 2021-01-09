@@ -96,13 +96,23 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
 
-    let metadata = MetadataCommand::new()
-        .manifest_path("./Cargo.toml")
-        .exec()
-        .unwrap();
+    if args.cargo_args.is_empty() {
+        log::error!("No args found to pass to cargo!");
+        log::error!("You still need to specify build arguments to cargo to achieve anything. :)");
+        std::process::exit(1);
+    }
+
+    let metadata = match MetadataCommand::new().manifest_path("./Cargo.toml").exec() {
+        Ok(v) => v,
+        Err(e) => {
+            log::error!("Failed to load Cargo.toml in current directory.");
+            log::error!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
-    // and $ANDROID_SDK_HOME/ndk-bundle as this is how Android Studio configures the world
+    // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
     let ndk_home = match derive_ndk_path() {
         Some(v) => {
             log::info!("Using NDK at path: {}", v.display());
