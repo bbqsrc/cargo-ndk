@@ -1,6 +1,10 @@
-## Development
+## v2.0.0 - 2021-01-09
 
-- TBD
+- **Breaking change**: most command line parameters have changed in some way, see the README for current usage.
+- Feature: Added auto-detection of NDK where available
+- Feature: Specify all build targets at once
+- Feature: Output built libraries to `jniLibs`-formatted directory layout
+- Enhancement: Better error handling in general, better messages
 
 ## v1.0.0 - 2020-03-15
 
@@ -10,6 +14,3 @@
 
 - Add `CXX` environment variables (thanks @remyers)
 
---
-
-I'll add other changelog entries eventually.
