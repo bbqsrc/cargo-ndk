@@ -67,6 +67,7 @@ pub(crate) fn run(
     triple: &str,
     platform: u8,
     cargo_args: &Vec<String>,
+    cargo_manifest: &Path,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
     let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, platform, ""));
@@ -81,14 +82,29 @@ pub(crate) fn run(
     log::debug!("linker: {}", &target_linker.display());
     log::debug!("cargo: {}", &cargo_bin);
 
-    Command::new(cargo_bin)
+    let mut cargo_cmd = Command::new(cargo_bin);
+    cargo_cmd
         .current_dir(dir)
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
         .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
-        .args(cargo_args)
+        .args(cargo_args);
+
+    match dir.parent() {
+        Some(parent) => {
+            if parent != dir {
+                log::debug!("Working directory does not match manifest-path");
+                cargo_cmd.arg("--manifest-path").arg(&cargo_manifest);
+            }
+        }
+        _ => {
+            log::warn!("Parent of current working directory does not exist");
+        }
+    }
+
+    cargo_cmd
         .arg("--target")
         .arg(&triple)
         .status()

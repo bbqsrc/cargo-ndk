@@ -21,6 +21,10 @@ struct Args {
         help = "triple for the target(s)\n                           Supported: armeabi-v7a arm64-v8a x86 x86_64."
     )]
     target: Vec<Target>,
+    #[options(
+        help = "If $(PWD) is not a Rust project, specify the location of the Cargo.toml (note the restrictions https://github.com/rust-lang/cargo/issues/7856)"
+    )]
+    manifest_path: Option<PathBuf>,
 
     #[options(help = "platform (also known as API level)")]
     platform: Option<u8>,
@@ -132,9 +136,10 @@ pub(crate) fn run(args: Vec<String>) {
             return;
         }
     };
-
-    let current_dir = std::env::current_dir().expect("current directory could not be resolved");
-    let config = match crate::meta::config(&current_dir.join("Cargo.toml"), is_release) {
+    let working_dir = std::env::current_dir().expect("current directory could not be resolved");
+    let working_dir_cargo = working_dir.join("Cargo.toml");
+    let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
+    let config = match crate::meta::config(&cargo_manifest, is_release) {
         Ok(v) => v,
         Err(e) => {
             log::error!("{}", e);
@@ -169,7 +174,7 @@ pub(crate) fn run(args: Vec<String>) {
         let triple = target.triple();
         log::info!("Building {} ({})", &target, &triple);
 
-        let status = crate::cargo::run(&current_dir, &ndk_home, triple, platform, &args.cargo_args);
+        let status = crate::cargo::run(&working_dir, &ndk_home, triple, platform, &args.cargo_args, cargo_manifest);
         let code = status.code().unwrap_or(-1);
 
         if code != 0 {
