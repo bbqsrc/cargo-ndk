@@ -100,7 +100,7 @@ pub(crate) fn run(
             }
         }
         _ => {
-            log::warn!("Parent of current working diredtory does not exist");
+            log::warn!("Parent of current working directory does not exist");
         }
     }
 
