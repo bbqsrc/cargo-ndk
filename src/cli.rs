@@ -21,16 +21,22 @@ struct Args {
         help = "triple for the target(s)\n                           Supported: armeabi-v7a arm64-v8a x86 x86_64."
     )]
     target: Vec<Target>,
+
     #[options(
-        help = "If $(PWD) is not a Rust project, specify the location of the Cargo.toml (note the restrictions https://github.com/rust-lang/cargo/issues/7856)"
+        meta = "DIR",
+        help = "output to a jniLibs directory in the correct sub-directories"
     )]
-    manifest_path: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
 
     #[options(help = "platform (also known as API level)")]
     platform: Option<u8>,
 
-    #[options(help = "output to a jniLibs directory in the correct sub-directories")]
-    output_dir: Option<PathBuf>,
+    #[options(
+        no_short,
+        meta = "PATH",
+        help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
+    )]
+    manifest_path: Option<PathBuf>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -174,7 +180,14 @@ pub(crate) fn run(args: Vec<String>) {
         let triple = target.triple();
         log::info!("Building {} ({})", &target, &triple);
 
-        let status = crate::cargo::run(&working_dir, &ndk_home, triple, platform, &args.cargo_args, cargo_manifest);
+        let status = crate::cargo::run(
+            &working_dir,
+            &ndk_home,
+            triple,
+            platform,
+            &args.cargo_args,
+            cargo_manifest,
+        );
         let code = status.code().unwrap_or(-1);
 
         if code != 0 {
