@@ -1,3 +1,8 @@
+## v2.1.0 - 2021-01-12
+
+- Fix: Handle --manifest-path correctly (thanks @ubamrein)
+- Enhancement: Update some help text phrasing and general ergonomics of output
+
 ## v2.0.0 - 2021-01-09
 
 - **Breaking change**: most command line parameters have changed in some way, see the README for current usage.
