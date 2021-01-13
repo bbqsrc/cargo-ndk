@@ -26,11 +26,21 @@ struct Args {
     )]
     manifest_path: Option<PathBuf>,
 
+    #[options(
+        meta = "DIR",
+        help = "output to a jniLibs directory in the correct sub-directories"
+    )]
+    output_dir: Option<PathBuf>,
+
     #[options(help = "platform (also known as API level)")]
     platform: Option<u8>,
 
-    #[options(help = "output to a jniLibs directory in the correct sub-directories")]
-    output_dir: Option<PathBuf>,
+    #[options(
+        no_short,
+        meta = "PATH",
+        help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
+    )]
+    manifest_path: Option<PathBuf>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -176,7 +186,14 @@ pub(crate) fn run(args: Vec<String>) {
         let triple = target.triple();
         log::info!("Building {} ({})", &target, &triple);
 
-        let status = crate::cargo::run(&working_dir, &ndk_home, triple, platform, &args.cargo_args, cargo_manifest);
+        let status = crate::cargo::run(
+            &working_dir,
+            &ndk_home,
+            triple,
+            platform,
+            &args.cargo_args,
+            cargo_manifest,
+        );
         let code = status.code().unwrap_or(-1);
 
         if code != 0 {
