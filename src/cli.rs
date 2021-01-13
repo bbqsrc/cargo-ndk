@@ -21,10 +21,6 @@ struct Args {
         help = "triple for the target(s)\n                           Supported: armeabi-v7a arm64-v8a x86 x86_64."
     )]
     target: Vec<Target>,
-    #[options(
-        help = "If $(PWD) is not a Rust project, specify the location of the Cargo.toml (note the restrictions https://github.com/rust-lang/cargo/issues/7856)"
-    )]
-    manifest_path: Option<PathBuf>,
 
     #[options(
         meta = "DIR",
@@ -123,6 +119,10 @@ pub(crate) fn run(args: Vec<String>) {
     if args.cargo_args.is_empty() {
         log::error!("No args found to pass to cargo!");
         log::error!("You still need to specify build arguments to cargo to achieve anything. :)");
+        std::process::exit(1);
+    }
+    if args.cargo_args.contains(&"--manifest-path".to_string()) {
+        log::error!("Manifest path should be supplied as an argument to cargo ndk (e.g. before build)");
         std::process::exit(1);
     }
     
