@@ -1,3 +1,7 @@
+## v2.2.0 - 2021-02-02
+
+- Fix: Return support for Rust-style triples to the target command line argument (the new behaviour also remains)
+
 ## v2.1.0 - 2021-01-12
 
 - Fix: Handle --manifest-path correctly (thanks @ubamrein)
