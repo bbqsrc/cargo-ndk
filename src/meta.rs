@@ -78,10 +78,16 @@ impl FromStr for Target {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
+            // match android style architectures
             "armeabi-v7a" => Target::ArmeabiV7a,
             "arm64-v8a" => Target::Arm64V8a,
             "x86" => Target::X86,
             "x86_64" => Target::X86_64,
+            // match rust triple architectures
+            "armv7-linux-androideabi" => Target::ArmeabiV7a,
+            "aarch64-linux-android" => Target::Arm64V8a,
+            "i686-linux-android" => Target::X86,
+            "x86_64-linux-android" => Target::X86_64,
             _ => return Err(format!("Unsupported target: '{}'", s)),
         })
     }
