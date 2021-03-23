@@ -181,6 +181,7 @@ pub(crate) fn run(args: Vec<String>) {
     }
 
     log::info!("NDK API level: {}", platform);
+    std::env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
     log::info!(
         "Building targets: {}",
         targets
