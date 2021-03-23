@@ -153,6 +153,17 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
 
+    let cmake_toolchain_path = ndk_home
+        .join("build")
+        .join("cmake")
+        .join("android.toolchain.cmake");
+
+    log::debug!(
+        "Exporting CARGO_NDK_CMAKE_TOOLCHAIN_PATH = {:?}",
+        &cmake_toolchain_path
+    );
+    std::env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
+
     // Try command line, then config. Config falls back to defaults in any case.
     let targets = if !args.target.is_empty() {
         args.target
@@ -179,6 +190,12 @@ pub(crate) fn run(args: Vec<String>) {
     for target in targets.iter() {
         let triple = target.triple();
         log::info!("Building {} ({})", &target, &triple);
+
+        log::debug!(
+            "Exporting CARGO_NDK_ANDROID_TARGET = {:?}",
+            &target.to_string()
+        );
+        std::env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
 
         let status = crate::cargo::run(
             &working_dir,
