@@ -112,13 +112,21 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
 
+    let working_dir = std::env::current_dir().expect("current directory could not be resolved");
+    let working_dir_cargo = working_dir.join("Cargo.toml");
+    let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
+
     if args.cargo_args.is_empty() {
         log::error!("No args found to pass to cargo!");
         log::error!("You still need to specify build arguments to cargo to achieve anything. :)");
         std::process::exit(1);
     }
-
-    let metadata = match MetadataCommand::new().manifest_path("./Cargo.toml").exec() {
+    if args.cargo_args.contains(&"--manifest-path".to_string()) {
+        log::error!("Manifest path should be supplied as an argument to cargo ndk (e.g. before build)");
+        std::process::exit(1);
+    }
+    
+    let metadata = match MetadataCommand::new().manifest_path(cargo_manifest).exec() {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed to load Cargo.toml in current directory.");
@@ -142,9 +150,7 @@ pub(crate) fn run(args: Vec<String>) {
             return;
         }
     };
-    let working_dir = std::env::current_dir().expect("current directory could not be resolved");
-    let working_dir_cargo = working_dir.join("Cargo.toml");
-    let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
+  
     let config = match crate::meta::config(&cargo_manifest, is_release) {
         Ok(v) => v,
         Err(e) => {
