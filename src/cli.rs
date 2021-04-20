@@ -118,7 +118,7 @@ pub(crate) fn run(args: Vec<String>) {
         std::process::exit(1);
     }
 
-    let metadata = match MetadataCommand::new().manifest_path("./Cargo.toml").exec() {
+    let metadata = match MetadataCommand::new().exec() {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed to load Cargo.toml in current directory.");
@@ -148,7 +148,7 @@ pub(crate) fn run(args: Vec<String>) {
     let config = match crate::meta::config(&cargo_manifest, is_release) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("{}", e);
+            log::error!("Failed loading manifest: {}", e);
             std::process::exit(1);
         }
     };
