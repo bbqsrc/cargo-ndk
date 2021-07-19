@@ -6,6 +6,7 @@ use std::{
 
 use cargo_metadata::MetadataCommand;
 use gumdrop::Options;
+use semver::Version;
 
 use crate::meta::Target;
 
@@ -41,26 +42,28 @@ struct Args {
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
     if ndk_dir.exists() {
-        let mut paths = std::fs::read_dir(&ndk_dir)
+        std::fs::read_dir(&ndk_dir)
             .ok()?
             .flat_map(Result::ok)
-            .map(|x| x.path())
-            .collect::<Vec<_>>();
-        paths.sort();
-        paths.reverse();
-        paths.first().cloned()
+            .filter_map(|x| {
+                let path = x.path();
+                path.components()
+                    .last()
+                    .and_then(|comp| comp.as_os_str().to_str())
+                    .and_then(|name| Version::parse(name).ok())
+                    .map(|version| (version, path))
+            })
+            .max_by(|(a, _), (b, _)| a.cmp(b))
+            .map(|(_, path)| path)
     } else {
         None
     }
 }
 
 fn derive_ndk_path() -> Option<PathBuf> {
-    if let Some(path) = env::var_os("ANDROID_NDK_HOME") {
-        return Some(PathBuf::from(path));
-    };
-
-    if let Some(path) = env::var_os("NDK_HOME") {
-        return Some(PathBuf::from(path));
+    if let Some(path) = env::var_os("ANDROID_NDK_HOME").or_else(|| env::var_os("NDK_HOME")) {
+        let path = PathBuf::from(path);
+        return highest_version_ndk_in_path(&path).or(Some(path));
     };
 
     if let Some(sdk_path) = env::var_os("ANDROID_SDK_HOME") {
@@ -230,7 +233,7 @@ pub(crate) fn run(args: Vec<String>) {
                     .join(target.triple())
                     .join(if is_release { "release" } else { "debug" });
 
-            log::trace!("Target path: {}", dir.display());
+            log::trace!("Target path: {}", dir);
 
             let so_files = std::fs::read_dir(&dir)
                 .ok()

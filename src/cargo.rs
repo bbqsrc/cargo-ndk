@@ -66,7 +66,7 @@ pub(crate) fn run(
     ndk_home: &Path,
     triple: &str,
     platform: u8,
-    cargo_args: &Vec<String>,
+    cargo_args: &[String],
     cargo_manifest: &Path,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
