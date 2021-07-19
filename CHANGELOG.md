@@ -1,7 +1,11 @@
+## v2.4.0 - 2021-07-19
+
+- Fix: `ANDROID_NDK_HOME` will now try to resolve the highest version in the given directory before falling back to literal path. (thanks @dnaka91)
+
 ## v2.3.0 - 2021-04-20
 
 - Fix: Workspaces no longer cause build failures
-- Enhancement: Added CARGO_NDK_CMAKE_TOOLCHAIN_PATH and CARGO_NDK_ANDROID_TARGET environment variable exports
+- Enhancement: Added `CARGO_NDK_CMAKE_TOOLCHAIN_PATH` and `CARGO_NDK_ANDROID_TARGET` environment variable exports
 
 ## v2.2.0 - 2021-02-02
 
