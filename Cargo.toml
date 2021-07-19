@@ -21,10 +21,11 @@ edition = "2018"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+cargo_metadata = "0.14.0"
+env_logger = "0.9.0"
 gumdrop = "0.8.0"
-toml = "0.5.6"
-serde = { version = "1.0.114", features = ["derive"] }
-pathos = "0.3.0-pre.2"
-env_logger = "0.7.1"
-log = "0.4.8"
-cargo_metadata = "0.10.0"
+log = "0.4.14"
+pathos = "0.3.0-pre.4"
+semver = "1.0.3"
+serde = { version = "1.0.126", features = ["derive"] }
+toml = "0.5.8"
