@@ -1,3 +1,7 @@
+## v2.4.1 - 2021-07-19
+
+- Fix: Expose `CARGO_NDK_ANDROID_PLATFORM` to subprocesses. (thanks @DoumanAsh)
+
 ## v2.4.0 - 2021-07-19
 
 - Fix: `ANDROID_NDK_HOME` will now try to resolve the highest version in the given directory before falling back to literal path. (thanks @dnaka91)
