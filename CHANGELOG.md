@@ -1,3 +1,8 @@
+## v2.3.0 - 2021-04-20
+
+- Fix: Workspaces no longer cause build failures
+- Enhancement: Added CARGO_NDK_CMAKE_TOOLCHAIN_PATH and CARGO_NDK_ANDROID_TARGET environment variable exports
+
 ## v2.2.0 - 2021-02-02
 
 - Fix: Return support for Rust-style triples to the target command line argument (the new behaviour also remains)

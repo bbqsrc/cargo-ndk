@@ -14,7 +14,7 @@ fn default_targets() -> Vec<Target> {
 
 #[derive(Debug, Deserialize)]
 struct CargoToml {
-    package: Package,
+    package: Option<Package>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +59,15 @@ struct NdkTarget {
 pub struct Config {
     pub platform: u8,
     pub targets: Vec<Target>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            platform: Ndk::default().platform,
+            targets: default_targets(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,11 +128,12 @@ pub fn config(cargo_toml_path: &Path, is_release: bool) -> Result<Config, std::i
     let toml_string = std::fs::read_to_string(cargo_toml_path)?;
     let cargo_toml: CargoToml = toml::from_str(&toml_string)?;
 
-    let ndk = cargo_toml
-        .package
-        .metadata
-        .and_then(|x| x.ndk)
-        .unwrap_or_default();
+    let package = match cargo_toml.package {
+        Some(v) => v,
+        None => return Ok(Default::default()),
+    };
+
+    let ndk = package.metadata.and_then(|x| x.ndk).unwrap_or_default();
     let base_targets = ndk.targets;
 
     let targets = if is_release {
