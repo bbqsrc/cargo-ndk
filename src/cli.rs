@@ -29,6 +29,9 @@ struct Args {
     )]
     output_dir: Option<PathBuf>,
 
+    #[options(help = "specific NDK version (defaults to the latest installed)")]
+    version: Option<Version>,
+
     #[options(help = "platform (also known as API level)")]
     platform: Option<u8>,
 
@@ -40,9 +43,9 @@ struct Args {
     manifest_path: Option<PathBuf>,
 }
 
-fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
+fn highest_version_ndk_in_path(ndk_dir: &Path, version: &Option<Version>) -> Option<PathBuf> {
     if ndk_dir.exists() {
-        std::fs::read_dir(&ndk_dir)
+        let mut dirs = std::fs::read_dir(&ndk_dir)
             .ok()?
             .flat_map(Result::ok)
             .filter_map(|x| {
@@ -52,23 +55,30 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
                     .and_then(|comp| comp.as_os_str().to_str())
                     .and_then(|name| Version::parse(name).ok())
                     .map(|version| (version, path))
-            })
-            .max_by(|(a, _), (b, _)| a.cmp(b))
-            .map(|(_, path)| path)
+            });
+
+        if let Some(version) = version {
+            dirs.find(|(v, _)| v == version)
+        } else {
+            dirs.max_by(|(a, _), (b, _)| a.cmp(b))
+        }
+        .map(|(_, path)| path)
     } else {
         None
     }
 }
 
-fn derive_ndk_path() -> Option<PathBuf> {
+fn derive_ndk_path(version: &Option<Version>) -> Option<PathBuf> {
     if let Some(path) = env::var_os("ANDROID_NDK_HOME").or_else(|| env::var_os("NDK_HOME")) {
         let path = PathBuf::from(path);
-        return highest_version_ndk_in_path(&path).or(Some(path));
+        // only fall back to the current path if no explicit version is set by the user
+        return highest_version_ndk_in_path(&path, version)
+            .or_else(|| version.is_none().then(|| path));
     };
 
     if let Some(sdk_path) = env::var_os("ANDROID_SDK_HOME") {
         let ndk_path = PathBuf::from(&sdk_path).join("ndk");
-        if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
+        if let Some(v) = highest_version_ndk_in_path(&ndk_path, version) {
             return Some(v);
         }
     };
@@ -83,7 +93,7 @@ fn derive_ndk_path() -> Option<PathBuf> {
 
     let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
     log::trace!("Default NDK dir: {:?}", &ndk_dir);
-    highest_version_ndk_in_path(&ndk_dir)
+    highest_version_ndk_in_path(&ndk_dir, version)
 }
 
 fn print_usage() {
@@ -130,21 +140,6 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
 
-    // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
-    // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
-    let ndk_home = match derive_ndk_path() {
-        Some(v) => {
-            log::info!("Using NDK at path: {}", v.display());
-            v
-        }
-        None => {
-            log::error!("Could not find any NDK.");
-            log::error!(
-                "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
-            );
-            return;
-        }
-    };
     let working_dir = std::env::current_dir().expect("current directory could not be resolved");
     let working_dir_cargo = working_dir.join("Cargo.toml");
     let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
@@ -153,6 +148,27 @@ pub(crate) fn run(args: Vec<String>) {
         Err(e) => {
             log::error!("Failed loading manifest: {}", e);
             std::process::exit(1);
+        }
+    };
+
+    let version = args.version.or(config.version);
+    // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
+    // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
+    let ndk_home = match derive_ndk_path(&version) {
+        Some(v) => {
+            log::info!("Using NDK at path: {}", v.display());
+            v
+        }
+        None => {
+            if let Some(version) = version {
+                log::error!("Could not find NDK version {}", version);
+            } else {
+                log::error!("Could not find any NDK.");
+            }
+            log::error!(
+                "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
+            );
+            return;
         }
     };
 

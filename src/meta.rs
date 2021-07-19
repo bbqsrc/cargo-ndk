@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::path::Path;
 use std::str::FromStr;
 
+use semver::Version;
 use serde::Deserialize;
 
 const fn default_platform() -> u8 {
@@ -29,6 +30,8 @@ struct Metadata {
 
 #[derive(Debug, Deserialize)]
 struct Ndk {
+    version: Option<Version>,
+
     #[serde(default = "default_platform")]
     platform: u8,
 
@@ -42,6 +45,7 @@ struct Ndk {
 impl Default for Ndk {
     fn default() -> Self {
         Self {
+            version: None,
             platform: default_platform(),
             targets: default_targets(),
             release: None,
@@ -57,6 +61,7 @@ struct NdkTarget {
 
 #[derive(Debug)]
 pub struct Config {
+    pub version: Option<Version>,
     pub platform: u8,
     pub targets: Vec<Target>,
 }
@@ -64,6 +69,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            version: None,
             platform: Ndk::default().platform,
             targets: default_targets(),
         }
@@ -145,6 +151,7 @@ pub fn config(cargo_toml_path: &Path, is_release: bool) -> Result<Config, std::i
     };
 
     Ok(Config {
+        version: ndk.version,
         platform: ndk.platform,
         targets,
     })
