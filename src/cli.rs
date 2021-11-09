@@ -100,6 +100,11 @@ pub(crate) fn run(args: Vec<String>) {
         std::process::exit(0);
     }
 
+    if args.contains(&"--version".into()) || args.contains(&"-v".into()) {
+        print!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
     let is_release = args.contains(&"--release".into());
     log::trace!("is_release: {}", is_release);
 
