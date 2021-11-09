@@ -69,9 +69,9 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
 ) -> std::process::ExitStatus {
-    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "ar"));
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, platform, ""));
-    let target_cxx = Path::new(&ndk_home).join(clang_suffix(&triple, &ARCH, platform, "++"));
+    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "ar"));
+    let target_linker = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, ""));
+    let target_cxx = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, "++"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
@@ -88,8 +88,8 @@ pub(crate) fn run(
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
-        .env(cargo_env_target_cfg(&triple, "ar"), &target_ar)
-        .env(cargo_env_target_cfg(&triple, "linker"), &target_linker)
+        .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
+        .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
 
     match dir.parent() {
@@ -112,7 +112,7 @@ pub(crate) fn run(
 }
 
 pub(crate) fn strip(ndk_home: &Path, triple: &str, bin_path: &Path) -> std::process::ExitStatus {
-    let target_strip = Path::new(&ndk_home).join(toolchain_suffix(&triple, &ARCH, "strip"));
+    let target_strip = Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "strip"));
 
     log::debug!("strip: {}", &target_strip.display());
 

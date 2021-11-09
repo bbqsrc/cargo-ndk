@@ -154,7 +154,7 @@ pub(crate) fn run(args: Vec<String>) {
     let working_dir = std::env::current_dir().expect("current directory could not be resolved");
     let working_dir_cargo = working_dir.join("Cargo.toml");
     let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
-    let config = match crate::meta::config(&cargo_manifest, is_release) {
+    let config = match crate::meta::config(cargo_manifest, is_release) {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed loading manifest: {}", e);
@@ -263,7 +263,7 @@ pub(crate) fn run(args: Vec<String>) {
                 std::fs::copy(so_file, &dest).unwrap();
 
                 if !args.no_strip {
-                    let _ = crate::cargo::strip(&ndk_home, &target.triple(), &dest);
+                    let _ = crate::cargo::strip(&ndk_home, target.triple(), &dest);
                 }
             }
         }
