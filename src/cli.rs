@@ -38,6 +38,12 @@ struct Args {
         help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
     )]
     manifest_path: Option<PathBuf>,
+
+    #[options(
+        help = "should shared objects retain their debug symbols",
+        default = "false"
+    )]
+    no_strip: bool,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -256,7 +262,9 @@ pub(crate) fn run(args: Vec<String>) {
                 log::info!("{} -> {}", &so_file.display(), dest.display());
                 std::fs::copy(so_file, &dest).unwrap();
 
-                let _ = crate::cargo::strip(&ndk_home, &target.triple(), &dest);
+                if !args.no_strip {
+                    let _ = crate::cargo::strip(&ndk_home, &target.triple(), &dest);
+                }
             }
         }
     }
