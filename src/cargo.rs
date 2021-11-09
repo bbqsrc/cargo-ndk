@@ -78,9 +78,13 @@ pub(crate) fn run(
     let cxx_key = format!("CXX_{}", &triple);
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
-    log::debug!("ar: {}", &target_ar.display());
-    log::debug!("linker: {}", &target_linker.display());
     log::debug!("cargo: {}", &cargo_bin);
+    log::debug!("{}={}", &ar_key, &target_ar.display());
+    log::debug!("{}={}", &cc_key, &target_linker.display());
+    log::debug!("{}={}", &cxx_key, &target_cxx.display());
+    log::debug!("{}={}", cargo_env_target_cfg(&triple, "ar"), &target_ar.display());
+    log::debug!("{}={}", cargo_env_target_cfg(&triple, "linker"), &target_linker.display());
+    log::debug!("Args: {:?}", &cargo_args);
 
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd

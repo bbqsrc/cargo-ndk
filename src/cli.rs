@@ -40,7 +40,7 @@ struct Args {
     manifest_path: Option<PathBuf>,
 
     #[options(
-        help = "should shared objects retain their debug symbols",
+        help = "disable stripping debug symbols",
         default = "false"
     )]
     no_strip: bool,
