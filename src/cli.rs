@@ -34,16 +34,17 @@ struct Args {
 
     #[options(
         no_short,
-        meta = "PATH",
-        help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
-    )]
-    manifest_path: Option<PathBuf>,
-
-    #[options(
         help = "disable stripping debug symbols",
         default = "false"
     )]
     no_strip: bool,
+
+    #[options(
+        no_short,
+        meta = "PATH",
+        help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
+    )]
+    manifest_path: Option<PathBuf>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
