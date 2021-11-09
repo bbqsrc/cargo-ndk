@@ -15,6 +15,9 @@ struct Args {
     #[options(help = "show help information")]
     help: bool,
 
+    #[options(help = "print version")]
+    version: bool,
+
     #[options(free, help = "args to be passed to cargo")]
     cargo_args: Vec<String>,
 
@@ -107,17 +110,16 @@ pub(crate) fn run(args: Vec<String>) {
         std::process::exit(0);
     }
 
-    if args.contains(&"--version".into()) || args.contains(&"-v".into()) {
-        print!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        std::process::exit(0);
-    }
-
     let is_release = args.contains(&"--release".into());
     log::trace!("is_release: {}", is_release);
 
     let args = match Args::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
         Ok(args) if args.help => {
             print_usage();
+            std::process::exit(0);
+        }
+        Ok(args) if args.version => {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             std::process::exit(0);
         }
         Ok(args) => args,
