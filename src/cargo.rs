@@ -69,9 +69,13 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
 ) -> std::process::ExitStatus {
-    let target_ar = Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "ar"));
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, ""));
-    let target_cxx = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, "++"));
+    let mut target_ar = ndk_home.join(toolchain_suffix(triple, ARCH, "ar"));
+    if !target_ar.exists() {
+        target_ar = ndk_home.join("llvm-ar");
+    }
+
+    let target_linker = ndk_home.join(clang_suffix(triple, ARCH, platform, ""));
+    let target_cxx = ndk_home.join(clang_suffix(triple, ARCH, platform, "++"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
