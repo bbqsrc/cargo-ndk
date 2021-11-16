@@ -120,7 +120,10 @@ pub(crate) fn run(
 }
 
 pub(crate) fn strip(ndk_home: &Path, triple: &str, bin_path: &Path) -> std::process::ExitStatus {
-    let target_strip = Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "strip"));
+    let mut target_strip = ndk_home.join(toolchain_suffix(triple, ARCH, "strip"));
+    if !target_strip.exists() {
+        target_strip = ndk_home.join("llvm-strip");
+    }
 
     log::debug!("strip: {}", &target_strip.display());
 
