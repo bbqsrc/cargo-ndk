@@ -48,6 +48,13 @@ struct Args {
         help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
     )]
     manifest_path: Option<PathBuf>,
+
+    #[options(
+        no_short,
+        help = "disable setting bindgen environment variables",
+        default = "false"
+    )]
+    no_bindgen_env_vars: bool,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -222,6 +229,7 @@ pub(crate) fn run(args: Vec<String>) {
             platform,
             &args.cargo_args,
             cargo_manifest,
+            args.no_bindgen_env_vars,
         );
         let code = status.code().unwrap_or(-1);
 
