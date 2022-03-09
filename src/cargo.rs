@@ -57,6 +57,18 @@ fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> PathBuf {
     .collect()
 }
 
+fn sysroot_suffix(arch: &str) -> PathBuf {
+    [
+        "toolchains",
+        "llvm",
+        "prebuilt",
+        arch,
+        "sysroot"
+    ]
+        .iter()
+        .collect()
+}
+
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace("-", "_"), key).to_uppercase()
 }
@@ -68,14 +80,17 @@ pub(crate) fn run(
     platform: u8,
     cargo_args: &[String],
     cargo_manifest: &Path,
+    bindgen: bool,
 ) -> std::process::ExitStatus {
     let target_ar = Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "ar"));
     let target_linker = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, ""));
     let target_cxx = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, "++"));
+    let target_sysroot = Path::new(&ndk_home).join(sysroot_suffix(ARCH));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
+    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple);
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     log::debug!("cargo: {}", &cargo_bin);
@@ -84,6 +99,7 @@ pub(crate) fn run(
     log::debug!("{}={}", &cxx_key, &target_cxx.display());
     log::debug!("{}={}", cargo_env_target_cfg(&triple, "ar"), &target_ar.display());
     log::debug!("{}={}", cargo_env_target_cfg(&triple, "linker"), &target_linker.display());
+    log::debug!("{}={}", &bindgen_clang_args_key, &target_sysroot.display());
     log::debug!("Args: {:?}", &cargo_args);
 
     let mut cargo_cmd = Command::new(cargo_bin);
@@ -95,6 +111,10 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
+
+    if bindgen {
+        cargo_cmd.env(bindgen_clang_args_key, format!("--sysroot={}", &target_sysroot.display()));
+    }
 
     match dir.parent() {
         Some(parent) => {
