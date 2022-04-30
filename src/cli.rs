@@ -189,9 +189,35 @@ pub(crate) fn run(args: Vec<String>) {
     };
     let ndk_version = derive_ndk_version(&ndk_home).expect("could not resolve NDK version");
     let working_dir = std::env::current_dir().expect("current directory could not be resolved");
-    let working_dir_cargo = working_dir.join("Cargo.toml");
-    let cargo_manifest = args.manifest_path.as_ref().unwrap_or(&working_dir_cargo);
-    let config = match crate::meta::config(cargo_manifest, is_release) {
+
+    // Attempt to smartly determine exactly what package is being worked with. The following is the manifest priority:
+    //
+    // 1. --manifest-path in the command-line arguments
+    // 2. The manifest path of the package specified with `-p` for cargo.
+    // 3. The manifest path in the current working dir
+    let cargo_args = &args.cargo_args;
+    let cargo_manifest = args
+        .manifest_path
+        .or_else(|| {
+            if let Some(selected_package) = cargo_args
+                .iter()
+                .position(|arg| arg == "-p")
+                .and_then(|idx| cargo_args.get(idx + 1))
+            {
+                let selected_package = metadata
+                    .packages
+                    .iter()
+                    .find(|p| &p.name == selected_package)
+                    .unwrap_or_else(|| panic!("unknown package: {}", selected_package));
+
+                Some(selected_package.manifest_path.as_std_path().to_path_buf())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| working_dir.join("Cargo.toml"));
+
+    let config = match crate::meta::config(&cargo_manifest, is_release) {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed loading manifest: {}", e);
@@ -251,7 +277,7 @@ pub(crate) fn run(args: Vec<String>) {
             triple,
             platform,
             &args.cargo_args,
-            cargo_manifest,
+            &cargo_manifest,
             args.bindgen,
         );
         let code = status.code().unwrap_or(-1);
