@@ -184,7 +184,7 @@ pub(crate) fn run(args: Vec<String>) {
             log::error!(
                 "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
             );
-            return;
+            std::process::exit(1);
         }
     };
     let ndk_version = derive_ndk_version(&ndk_home).expect("could not resolve NDK version");
