@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ndk"
-version = "2.7.0"
+version = "2.8.0"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"

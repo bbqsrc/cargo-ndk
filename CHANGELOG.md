@@ -1,3 +1,8 @@
+## v2.8.0 - 2022-05-07
+
+- Fix: missing NDK now exits with exit code 1 (thanks @complexspaces)
+- Enhancement: more intelligent handling of manifest context (thanks @complexspaces)
+
 ## v2.7.0 - 2022-03-22
 
 - Fix: now works with NDK 23 and maybe up. Maybe. Google do be that company, yo.
