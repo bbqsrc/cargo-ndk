@@ -99,7 +99,7 @@ pub(crate) fn run(
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
-    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple);
+    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace("-", "_"));
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     log::debug!("cargo: {}", &cargo_bin);
@@ -155,7 +155,12 @@ pub(crate) fn run(
         .expect("cargo crashed")
 }
 
-pub(crate) fn strip(ndk_home: &Path, triple: &str, bin_path: &Path, version: Version) -> std::process::ExitStatus {
+pub(crate) fn strip(
+    ndk_home: &Path,
+    triple: &str,
+    bin_path: &Path,
+    version: Version,
+) -> std::process::ExitStatus {
     let target_strip = if version.major >= 23 {
         Path::new(&ndk_home).join(ndk23_tool(ARCH, "llvm-strip"))
     } else {
