@@ -116,7 +116,11 @@ pub(crate) fn run(
         cargo_env_target_cfg(&triple, "linker"),
         &target_linker.display()
     );
-    log::debug!("{}={}", &bindgen_clang_args_key, std::env::var(bindgen_clang_args_key.clone()).unwrap());
+    log::debug!(
+        "{}={}",
+        &bindgen_clang_args_key,
+        std::env::var(bindgen_clang_args_key.clone()).unwrap_or("".into())
+    );
     log::debug!("Args: {:?}", &cargo_args);
 
     let mut cargo_cmd = Command::new(cargo_bin);
@@ -129,11 +133,15 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
 
-    if !bindgen {
-        cargo_cmd.env(
-            bindgen_clang_args_key,
-            format!("--sysroot={}", &target_sysroot.display()),
+    if bindgen {
+        let extra_include = format!("{}/{}", &target_sysroot.display(), triple);
+        let extra_bindgen_args = format!(
+            "--sysroot={} -I{}",
+            &target_sysroot.display(),
+            extra_include
         );
+        cargo_cmd.env(bindgen_clang_args_key, extra_bindgen_args.clone());
+        log::debug!("extra_bindgen_args={}", extra_bindgen_args);
     }
 
     match dir.parent() {
