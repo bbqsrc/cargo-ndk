@@ -133,7 +133,7 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
 
-    let extra_include = format!("{}/{}", &target_sysroot.display(), triple);
+    let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
     if bindgen {
         let bindgen_args = format!(
             "--sysroot={} -I{}",
