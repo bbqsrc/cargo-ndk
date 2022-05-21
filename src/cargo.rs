@@ -133,15 +133,22 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
 
+    let extra_include = format!("{}/{}", &target_sysroot.display(), triple);
     if bindgen {
-        let extra_include = format!("{}/{}", &target_sysroot.display(), triple);
-        let extra_bindgen_args = format!(
+        let bindgen_args = format!(
             "--sysroot={} -I{}",
             &target_sysroot.display(),
             extra_include
         );
-        cargo_cmd.env(bindgen_clang_args_key, extra_bindgen_args.clone());
-        log::debug!("extra_bindgen_args={}", extra_bindgen_args);
+        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
+        log::debug!("bindgen_args={}", bindgen_args);
+    } else {
+        let bindgen_args = format!(
+            "-I{}",
+            extra_include
+        );
+        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
+        log::debug!("bindgen_args={}", bindgen_args);
     }
 
     match dir.parent() {
