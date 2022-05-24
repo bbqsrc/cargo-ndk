@@ -1,3 +1,7 @@
+## v2.9.0 - 2022-05-24
+
+- Fix: better bindgen handling (thanks @lattice0)
+
 ## v2.8.0 - 2022-05-07
 
 - Fix: missing NDK now exits with exit code 1 (thanks @complexspaces)
