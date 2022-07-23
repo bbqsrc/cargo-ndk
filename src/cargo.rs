@@ -1,7 +1,9 @@
+use std::io::{Write, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cargo_metadata::Version;
+use cargo_metadata::camino::Utf8PathBuf;
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -75,8 +77,19 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace("-", "_"), key).to_uppercase()
 }
 
+fn create_libgcc_linker_script_workaround(target_dir: &Utf8PathBuf) -> Result<Utf8PathBuf> {
+    let libgcc_workaround_dir = target_dir.join("cargo-ndk").join("libgcc-workaround");
+    std::fs::create_dir_all(&libgcc_workaround_dir)?;
+    let libgcc_workaround_file = libgcc_workaround_dir.join("libgcc.a");
+    let mut file = std::fs::File::create(libgcc_workaround_file)?;
+    file.write_all(b"INPUT(-lunwind)")?;
+
+    Ok(libgcc_workaround_dir)
+}
+
 pub(crate) fn run(
     dir: &Path,
+    target_dir: &Utf8PathBuf,
     ndk_home: &Path,
     version: Version,
     triple: &str,
@@ -123,6 +136,16 @@ pub(crate) fn run(
     );
     log::debug!("Args: {:?}", &cargo_args);
 
+    // Read initial RUSTFLAGS
+    let mut rustflags = match std::env::var("CARGO_ENCODED_RUSTFLAGS") {
+        Ok(val) => val,
+        Err(std::env::VarError::NotPresent) => "".to_string(),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            log::error!("RUSTFLAGS environment variable contains non-unicode characters");
+            std::process::exit(1);
+        }
+    };
+
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd
         .current_dir(dir)
@@ -132,6 +155,42 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
         .args(cargo_args);
+
+    // NDK releases >= 23 beta3 no longer include libgcc which rust's pre-built
+    // standard libraries depend on. As a workaround for newer NDKs we redirect
+    // libgcc to libunwind.
+    //
+    // Note: there is a tiny chance of a false positive here while the first two
+    // beta releases for NDK v23 didn't yet include libunwind for all
+    // architectures.
+    //
+    // Note: even though rust-lang merged a fix to support linking the standard
+    // libraries against newer NDKs they still (up to 1.62.0 at time of writing)
+    // choose to build binaries (distributed by rustup) against an older NDK
+    // release (presumably aiming for broader compatibility) which means that
+    // even the latest versions still require this workaround.
+    //
+    // Ref: https://github.com/rust-lang/rust/pull/85806
+    if version.major >= 23 {
+        match create_libgcc_linker_script_workaround(target_dir) {
+            Ok(libdir) => {
+                // Note that we don't use `cargo rustc` to pass custom library search paths to
+                // rustc and instead use `CARGO_ENCODED_RUSTFLAGS` because it affects the building
+                // of all transitive cdylibs (which all need this workaround).
+                if !rustflags.is_empty() { // Avoid creating an empty '' rustc argument
+                    rustflags.push_str("\x1f");
+                }
+                rustflags.push_str("-L\x1f");
+                rustflags.push_str(libdir.as_str());
+                cargo_cmd.env("CARGO_ENCODED_RUSTFLAGS", rustflags);
+            }
+            Err(e) => {
+                log::error!("Failed to create libgcc.a linker script workaround");
+                log::error!("{}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
     if bindgen {
