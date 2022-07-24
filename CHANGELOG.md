@@ -1,3 +1,7 @@
+## v2.10.0 - 2022-07-24
+
+- Fix: Support NDK 23 and higher with libgcc workaround (thanks @rib)
+
 ## v2.9.0 - 2022-05-24
 
 - Fix: better bindgen handling (thanks @lattice0)
