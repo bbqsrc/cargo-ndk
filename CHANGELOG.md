@@ -1,6 +1,10 @@
+## v2.10.1 - 2022-07-24
+
+- Enhancement: update dependencies
+
 ## v2.10.0 - 2022-07-24
 
-- Fix: Support NDK 23 and higher with libgcc workaround (thanks @rib)
+- Fix: support NDK 23 and higher with libgcc workaround (thanks @rib)
 
 ## v2.9.0 - 2022-05-24
 
