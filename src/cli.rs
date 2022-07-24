@@ -75,12 +75,18 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
 }
 
 fn derive_ndk_path() -> Option<PathBuf> {
-    if let Some(path) = env::var_os("ANDROID_NDK_HOME").or_else(|| env::var_os("NDK_HOME")) {
+    if let Some(path) = env::var_os("ANDROID_NDK_HOME")
+        .or_else(|| env::var_os("ANDROID_NDK_ROOT"))
+        .or_else(|| env::var_os("NDK_HOME"))
+    {
         let path = PathBuf::from(path);
         return highest_version_ndk_in_path(&path).or(Some(path));
     };
 
-    if let Some(sdk_path) = env::var_os("ANDROID_SDK_HOME") {
+    if let Some(sdk_path) = env::var_os("ANDROID_HOME")
+        .or_else(|| env::var_os("ANDROID_SDK_HOME"))
+        .or_else(|| env::var_os("ANDROID_SDK_ROOT"))
+    {
         let ndk_path = PathBuf::from(&sdk_path).join("ndk");
         if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
             return Some(v);
