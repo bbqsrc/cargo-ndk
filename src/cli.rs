@@ -1,6 +1,6 @@
 use std::{
     env,
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     io::{self, ErrorKind},
     path::{Path, PathBuf},
 };
@@ -74,25 +74,49 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Return the name and value of the first environment variable that is set
+///
+/// Additionally checks that if any other variables are set then they should
+/// be consistent with the first variable, otherwise a warning is printed.
+fn find_first_consistent_var_set<'a>(vars: &'a [&str]) -> Option<(&'a str, OsString)> {
+    let mut first_var_set = None;
+    for var in vars {
+        if let Some(path) = env::var_os(var) {
+            if let Some((first_var, first_path)) = first_var_set.as_ref() {
+                if *first_path != path {
+                    log::warn!("Environment variable {first_var} = '{first_path:#?}' doesn't match {var} = {path:#?}");
+                }
+                continue;
+            }
+            first_var_set = Some((*var, path));
+        }
+    }
+
+    first_var_set
+}
+
 /// Return a path to a discovered NDK and string describing how it was found
 fn derive_ndk_path() -> Option<(String, PathBuf)> {
-    if let Some((var_name, path)) = env::var_os("ANDROID_NDK_HOME").map(|path| ("ANDROID_NDK_HOME", path))
-        .or_else(|| env::var_os("ANDROID_NDK_ROOT").map(|path| ("ANDROID_NDK_ROOT", path)))
-        .or_else(|| env::var_os("NDK_HOME").map(|path| ("NDK_HOME", path)))
-    {
+    let ndk_vars = [
+        "ANDROID_NDK_HOME",
+        "ANDROID_NDK_ROOT",
+        "ANDROID_NDK_PATH",
+        "NDK_HOME",
+    ];
+    if let Some((var_name, path)) = find_first_consistent_var_set(&ndk_vars) {
         let path = PathBuf::from(path);
-        return highest_version_ndk_in_path(&path).or(Some(path)).map(|path| (var_name.to_string(), path));
-    };
+        return highest_version_ndk_in_path(&path)
+            .or(Some(path))
+            .map(|path| (var_name.to_string(), path));
+    }
 
-    if let Some((var_name, sdk_path)) = env::var_os("ANDROID_HOME").map(|path| ("ANDROID_HOME", path))
-        .or_else(|| env::var_os("ANDROID_SDK_HOME").map(|path| ("ANDROID_SDK_HOME", path)))
-        .or_else(|| env::var_os("ANDROID_SDK_ROOT").map(|path| ("ANDROID_SDK_ROOT", path)))
-    {
+    let sdk_vars = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_SDK_HOME"];
+    if let Some((var_name, sdk_path)) = find_first_consistent_var_set(&sdk_vars) {
         let ndk_path = PathBuf::from(&sdk_path).join("ndk");
         if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
             return Some((var_name.to_string(), v));
         }
-    };
+    }
 
     // Check Android Studio installed directories
     #[cfg(windows)]
