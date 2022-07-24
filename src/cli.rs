@@ -1,7 +1,8 @@
 use std::{
     env,
     ffi::OsStr,
-    path::{Path, PathBuf}, io::{self, ErrorKind},
+    io::{self, ErrorKind},
+    path::{Path, PathBuf},
 };
 
 use cargo_metadata::MetadataCommand;
@@ -329,7 +330,8 @@ pub(crate) fn run(args: Vec<String>) {
                 std::fs::copy(so_file, &dest).unwrap();
 
                 if !args.no_strip {
-                    let _ = crate::cargo::strip(&ndk_home, target.triple(), &dest, ndk_version.clone());
+                    let _ =
+                        crate::cargo::strip(&ndk_home, target.triple(), &dest, ndk_version.clone());
                 }
             }
         }

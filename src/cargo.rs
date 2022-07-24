@@ -1,9 +1,9 @@
-use std::io::{Write, Result};
+use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use cargo_metadata::Version;
 use cargo_metadata::camino::Utf8PathBuf;
+use cargo_metadata::Version;
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -177,7 +177,8 @@ pub(crate) fn run(
                 // Note that we don't use `cargo rustc` to pass custom library search paths to
                 // rustc and instead use `CARGO_ENCODED_RUSTFLAGS` because it affects the building
                 // of all transitive cdylibs (which all need this workaround).
-                if !rustflags.is_empty() { // Avoid creating an empty '' rustc argument
+                if !rustflags.is_empty() {
+                    // Avoid creating an empty '' rustc argument
                     rustflags.push_str("\x1f");
                 }
                 rustflags.push_str("-L\x1f");
@@ -202,10 +203,7 @@ pub(crate) fn run(
         cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
         log::debug!("bindgen_args={}", bindgen_args);
     } else {
-        let bindgen_args = format!(
-            "-I{}",
-            extra_include
-        );
+        let bindgen_args = format!("-I{}", extra_include);
         cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
         log::debug!("bindgen_args={}", bindgen_args);
     }
