@@ -74,22 +74,23 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
     }
 }
 
-fn derive_ndk_path() -> Option<PathBuf> {
-    if let Some(path) = env::var_os("ANDROID_NDK_HOME")
-        .or_else(|| env::var_os("ANDROID_NDK_ROOT"))
-        .or_else(|| env::var_os("NDK_HOME"))
+/// Return a path to a discovered NDK and string describing how it was found
+fn derive_ndk_path() -> Option<(String, PathBuf)> {
+    if let Some((var_name, path)) = env::var_os("ANDROID_NDK_HOME").map(|path| ("ANDROID_NDK_HOME", path))
+        .or_else(|| env::var_os("ANDROID_NDK_ROOT").map(|path| ("ANDROID_NDK_ROOT", path)))
+        .or_else(|| env::var_os("NDK_HOME").map(|path| ("NDK_HOME", path)))
     {
         let path = PathBuf::from(path);
-        return highest_version_ndk_in_path(&path).or(Some(path));
+        return highest_version_ndk_in_path(&path).or(Some(path)).map(|path| (var_name.to_string(), path));
     };
 
-    if let Some(sdk_path) = env::var_os("ANDROID_HOME")
-        .or_else(|| env::var_os("ANDROID_SDK_HOME"))
-        .or_else(|| env::var_os("ANDROID_SDK_ROOT"))
+    if let Some((var_name, sdk_path)) = env::var_os("ANDROID_HOME").map(|path| ("ANDROID_HOME", path))
+        .or_else(|| env::var_os("ANDROID_SDK_HOME").map(|path| ("ANDROID_SDK_HOME", path)))
+        .or_else(|| env::var_os("ANDROID_SDK_ROOT").map(|path| ("ANDROID_SDK_ROOT", path)))
     {
         let ndk_path = PathBuf::from(&sdk_path).join("ndk");
         if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
-            return Some(v);
+            return Some((var_name.to_string(), v));
         }
     };
 
@@ -103,7 +104,7 @@ fn derive_ndk_path() -> Option<PathBuf> {
 
     let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
     log::trace!("Default NDK dir: {:?}", &ndk_dir);
-    highest_version_ndk_in_path(&ndk_dir)
+    highest_version_ndk_in_path(&ndk_dir).map(|path| ("Standard Location".to_string(), path))
 }
 
 fn print_usage() {
@@ -182,8 +183,8 @@ pub(crate) fn run(args: Vec<String>) {
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
     let ndk_home = match derive_ndk_path() {
-        Some(v) => {
-            log::info!("Using NDK at path: {}", v.display());
+        Some((how, v)) => {
+            log::info!("Using NDK at path: {} ({})", v.display(), how);
             v
         }
         None => {
