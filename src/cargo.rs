@@ -202,10 +202,6 @@ pub(crate) fn run(
         );
         cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
         log::debug!("bindgen_args={}", bindgen_args);
-    } else {
-        let bindgen_args = format!("-I{}", extra_include);
-        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
-        log::debug!("bindgen_args={}", bindgen_args);
     }
 
     match dir.parent() {
