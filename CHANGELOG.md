@@ -1,7 +1,6 @@
 ## v2.11.0 - 2022-08-04
 
 - Fix: Remove automatic adding of bindgen flags (use `--bindgen` as expected)
-- Enhancement: Provide libgcc linker script workaround for NDK >= 23 (thanks @rib)
 - Enhancement: Consider all widely-used NDK/SDK env vars (thanks @rib)
 
 ## v2.10.1 - 2022-07-24
