@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -146,6 +147,16 @@ pub(crate) fn run(
         }
     };
 
+    // Insert Cargo arguments before any `--` arguments.
+    let arg_insertion_position = cargo_args
+        .iter()
+        .enumerate()
+        .find(|e| e.1.trim() == "--")
+        .map(|e| e.0)
+        .unwrap_or(cargo_args.len());
+
+    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(|arg| arg.into()).collect();
+
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd
         .current_dir(dir)
@@ -153,8 +164,7 @@ pub(crate) fn run(
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
-        .env(cargo_env_target_cfg(triple, "linker"), &target_linker)
-        .args(cargo_args);
+        .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
     // NDK releases >= 23 beta3 no longer include libgcc which rust's pre-built
     // standard libraries depend on. As a workaround for newer NDKs we redirect
@@ -208,7 +218,14 @@ pub(crate) fn run(
         Some(parent) => {
             if parent != dir {
                 log::debug!("Working directory does not match manifest-path");
-                cargo_cmd.arg("--manifest-path").arg(&cargo_manifest);
+                cargo_args.insert(
+                    arg_insertion_position,
+                    cargo_manifest.as_os_str().to_owned(),
+                );
+                cargo_args.insert(
+                    arg_insertion_position,
+                    OsStr::new("--manifest-path").to_owned(),
+                );
             }
         }
         _ => {
@@ -216,11 +233,10 @@ pub(crate) fn run(
         }
     }
 
-    cargo_cmd
-        .arg("--target")
-        .arg(&triple)
-        .status()
-        .expect("cargo crashed")
+    cargo_args.insert(arg_insertion_position, OsStr::new(triple).to_owned());
+    cargo_args.insert(arg_insertion_position, OsStr::new("--target").to_owned());
+
+    cargo_cmd.args(cargo_args).status().expect("cargo crashed")
 }
 
 pub(crate) fn strip(
