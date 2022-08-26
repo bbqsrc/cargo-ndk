@@ -113,13 +113,29 @@ pub(crate) fn run(
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
+    let cflags_key = format!("CFLAGS_{}", &triple);
+    let cxxflags_key = format!("CXXFLAGS_{}", &triple);
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace("-", "_"));
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+
+    let target_cflags = format!(
+        "{} -D__ANDROID_API__={}",
+        std::env::var(&cflags_key).unwrap_or_default(),
+        platform
+    );
+
+    let target_cxxflags = format!(
+        "{} -D__ANDROID_API__={}",
+        std::env::var(&cxxflags_key).unwrap_or_default(),
+        platform
+    );
 
     log::debug!("cargo: {}", &cargo_bin);
     log::debug!("{}={}", &ar_key, &target_ar.display());
     log::debug!("{}={}", &cc_key, &target_linker.display());
     log::debug!("{}={}", &cxx_key, &target_cxx.display());
+    log::debug!("{}={}", &cflags_key, target_cflags);
+    log::debug!("{}={}", &cxxflags_key, target_cxxflags);
     log::debug!(
         "{}={}",
         cargo_env_target_cfg(&triple, "ar"),
@@ -163,6 +179,8 @@ pub(crate) fn run(
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
+        .env(cflags_key, &target_cflags)
+        .env(cxxflags_key, &target_cxxflags)
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
