@@ -139,9 +139,9 @@ fn print_usage() {
 
 fn find_base_dir() -> PathBuf {
     #[cfg(windows)]
-    let base_dir = pathos::user::local_dir().unwrap();
+    let base_dir = pathos::user::local_dir().unwrap().to_path_buf();
     #[cfg(target_os = "linux")]
-    let base_dir = pathos::user::data_dir().unwrap();
+    let base_dir = pathos::user::data_dir().unwrap().to_path_buf();
     #[cfg(target_os = "macos")]
     let base_dir = pathos::user::home_dir().unwrap().join("Library");
 
