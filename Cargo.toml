@@ -16,7 +16,7 @@ categories = [
     "development-tools::build-utils"
 ]
 edition = "2018"
-rust-version = "1.48"
+rust-version = "1.56"
 
 [badges]
 maintenance = { status = "actively-developed" }
