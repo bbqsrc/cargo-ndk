@@ -1,3 +1,7 @@
+## v2.12.1 - 2022-09-27
+
+- Fix: `build --profile <foo>` is now supported.
+
 ## v2.12.0 - 2022-09-27
 
 This release clarifies that the MSRV is `1.56`. This is confirmed by CI.
