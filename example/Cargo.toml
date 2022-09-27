@@ -17,3 +17,12 @@ targets = [
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",
 ]
+
+# An example of a custom profile
+[profile.release-space-optimized]
+inherits = "release"
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true  # Enable link time optimization
+codegen-units = 1  # Reduce parallel code generation units
+panic = "abort"

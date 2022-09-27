@@ -1,6 +1,7 @@
 use std::{
     env,
     ffi::{OsStr, OsString},
+    fmt::Display,
     io::{self, ErrorKind},
     path::{Path, PathBuf},
 };
@@ -124,12 +125,7 @@ fn derive_ndk_path() -> Option<(String, PathBuf)> {
     }
 
     // Check Android Studio installed directories
-    #[cfg(windows)]
-    let base_dir = pathos::user::local_dir().unwrap();
-    #[cfg(target_os = "linux")]
-    let base_dir = pathos::user::data_dir().unwrap();
-    #[cfg(target_os = "macos")]
-    let base_dir = pathos::user::home_dir().unwrap().join("Library");
+    let base_dir = find_base_dir();
 
     let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
     log::trace!("Default NDK dir: {:?}", &ndk_dir);
@@ -139,6 +135,17 @@ fn derive_ndk_path() -> Option<(String, PathBuf)> {
 fn print_usage() {
     println!("cargo-ndk -- Brendan Molloy <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk [OPTIONS] <CARGO_ARGS>\n");
     println!("{}", Args::usage());
+}
+
+fn find_base_dir() -> PathBuf {
+    #[cfg(windows)]
+    let base_dir = pathos::user::local_dir().unwrap();
+    #[cfg(target_os = "linux")]
+    let base_dir = pathos::user::data_dir().unwrap();
+    #[cfg(target_os = "macos")]
+    let base_dir = pathos::user::home_dir().unwrap().join("Library");
+
+    base_dir
 }
 
 fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
@@ -166,6 +173,23 @@ fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
     ))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BuildMode {
+    Debug,
+    Release,
+    Profile(String),
+}
+
+impl Display for BuildMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            BuildMode::Debug => "debug",
+            BuildMode::Release => "release",
+            BuildMode::Profile(x) => x,
+        })
+    }
+}
+
 pub(crate) fn run(args: Vec<String>) {
     log::trace!("Args: {:?}", args);
 
@@ -175,8 +199,19 @@ pub(crate) fn run(args: Vec<String>) {
         std::process::exit(0);
     }
 
-    let is_release = args.contains(&"--release".into());
-    log::trace!("is_release: {}", is_release);
+    let build_mode = if args.contains(&"--release".into()) {
+        BuildMode::Release
+    } else if let Some(i) = args.iter().position(|x| x == "--profile") {
+        if let Some(profile) = args.get(i + 1) {
+            BuildMode::Profile(profile.to_string())
+        } else {
+            BuildMode::Debug
+        }
+    } else {
+        BuildMode::Debug
+    };
+
+    log::trace!("build mode: {:?}", build_mode);
 
     let args = match Args::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
         Ok(args) if args.help => {
@@ -254,7 +289,7 @@ pub(crate) fn run(args: Vec<String>) {
         })
         .unwrap_or_else(|| working_dir.join("Cargo.toml"));
 
-    let config = match crate::meta::config(&cargo_manifest, is_release) {
+    let config = match crate::meta::config(&cargo_manifest, &build_mode) {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed loading manifest: {}", e);
@@ -338,10 +373,7 @@ pub(crate) fn run(args: Vec<String>) {
             let arch_output_dir = output_dir.join(target.to_string());
             std::fs::create_dir_all(&arch_output_dir).unwrap();
 
-            let dir =
-                out_dir
-                    .join(target.triple())
-                    .join(if is_release { "release" } else { "debug" });
+            let dir = out_dir.join(target.triple()).join(build_mode.to_string());
 
             log::trace!("Target path: {}", dir);
 

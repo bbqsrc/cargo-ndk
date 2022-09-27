@@ -4,6 +4,8 @@ use std::str::FromStr;
 
 use serde::Deserialize;
 
+use crate::cli::BuildMode;
+
 const fn default_platform() -> u8 {
     21
 }
@@ -124,7 +126,10 @@ impl Target {
     }
 }
 
-pub fn config(cargo_toml_path: &Path, is_release: bool) -> Result<Config, std::io::Error> {
+pub(crate) fn config(
+    cargo_toml_path: &Path,
+    build_mode: &BuildMode,
+) -> Result<Config, std::io::Error> {
     let toml_string = std::fs::read_to_string(cargo_toml_path)?;
     let cargo_toml: CargoToml = toml::from_str(&toml_string)?;
 
@@ -136,7 +141,7 @@ pub fn config(cargo_toml_path: &Path, is_release: bool) -> Result<Config, std::i
     let ndk = package.metadata.and_then(|x| x.ndk).unwrap_or_default();
     let base_targets = ndk.targets;
 
-    let targets = if is_release {
+    let targets = if matches!(build_mode, BuildMode::Release) {
         ndk.release
             .map(|x| x.targets)
             .unwrap_or_else(|| base_targets)
