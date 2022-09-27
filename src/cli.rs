@@ -5,9 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{semver::Version, MetadataCommand};
 use gumdrop::Options;
-use semver::Version;
 
 use crate::meta::Target;
 
@@ -84,7 +83,13 @@ fn find_first_consistent_var_set<'a>(vars: &'a [&str]) -> Option<(&'a str, OsStr
         if let Some(path) = env::var_os(var) {
             if let Some((first_var, first_path)) = first_var_set.as_ref() {
                 if *first_path != path {
-                    log::warn!("Environment variable {first_var} = '{first_path:#?}' doesn't match {var} = {path:#?}");
+                    log::warn!(
+                        "Environment variable `{} = {:#?}` doesn't match `{} = {:#?}`",
+                        first_var,
+                        first_path,
+                        var,
+                        path
+                    );
                 }
                 continue;
             }
@@ -138,7 +143,7 @@ fn print_usage() {
 
 fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
     let data = std::fs::read_to_string(path.join("source.properties"))?;
-    for line in data.split("\n") {
+    for line in data.split('\n') {
         if line.starts_with("Pkg.Revision") {
             let mut chunks = line.split(" = ");
             let _ = chunks
@@ -147,7 +152,7 @@ fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
             let version = chunks
                 .next()
                 .ok_or_else(|| io::Error::new(ErrorKind::Other, "No chunk"))?;
-            let version = Version::parse(&version).map_err(|_e| {
+            let version = Version::parse(version).map_err(|_e| {
                 log::error!("Could not parse NDK version. Got: '{}'", version);
                 io::Error::new(ErrorKind::Other, "Bad version")
             })?;

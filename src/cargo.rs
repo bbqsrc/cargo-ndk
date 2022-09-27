@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cargo_metadata::camino::Utf8PathBuf;
-use cargo_metadata::Version;
+use cargo_metadata::semver::Version;
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -75,7 +75,7 @@ fn sysroot_suffix(arch: &str) -> PathBuf {
 }
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
-    format!("CARGO_TARGET_{}_{}", &triple.replace("-", "_"), key).to_uppercase()
+    format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
 }
 
 fn create_libgcc_linker_script_workaround(target_dir: &Utf8PathBuf) -> Result<Utf8PathBuf> {
@@ -88,6 +88,7 @@ fn create_libgcc_linker_script_workaround(target_dir: &Utf8PathBuf) -> Result<Ut
     Ok(libgcc_workaround_dir)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     dir: &Path,
     target_dir: &Utf8PathBuf,
@@ -115,7 +116,7 @@ pub(crate) fn run(
     let cxx_key = format!("CXX_{}", &triple);
     let cflags_key = format!("CFLAGS_{}", &triple);
     let cxxflags_key = format!("CXXFLAGS_{}", &triple);
-    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace("-", "_"));
+    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     let target_cflags = format!(
@@ -138,18 +139,18 @@ pub(crate) fn run(
     log::debug!("{}={}", &cxxflags_key, target_cxxflags);
     log::debug!(
         "{}={}",
-        cargo_env_target_cfg(&triple, "ar"),
+        cargo_env_target_cfg(triple, "ar"),
         &target_ar.display()
     );
     log::debug!(
         "{}={}",
-        cargo_env_target_cfg(&triple, "linker"),
+        cargo_env_target_cfg(triple, "linker"),
         &target_linker.display()
     );
     log::debug!(
         "{}={}",
         &bindgen_clang_args_key,
-        std::env::var(bindgen_clang_args_key.clone()).unwrap_or("".into())
+        &std::env::var(bindgen_clang_args_key.clone()).unwrap_or_default()
     );
     log::debug!("Args: {:?}", &cargo_args);
 
@@ -207,7 +208,7 @@ pub(crate) fn run(
                 // of all transitive cdylibs (which all need this workaround).
                 if !rustflags.is_empty() {
                     // Avoid creating an empty '' rustc argument
-                    rustflags.push_str("\x1f");
+                    rustflags.push('\x1f');
                 }
                 rustflags.push_str("-L\x1f");
                 rustflags.push_str(libdir.as_str());
