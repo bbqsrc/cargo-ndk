@@ -1,5 +1,8 @@
 # cargo-ndk - Build Rust code for Android
 
+![CI](https://github.com/bbqsrc/cargo-ndk/actions/workflows/ci.yml/badge.svg)
+![Minimum supported Rust version: 1.56](https://img.shields.io/badge/MSRV-1.56-informational)
+
 This cargo extension handles all the environment configuration needed for successfully building libraries
 for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
 
@@ -44,10 +47,6 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 - macOS (x86_64 and arm64)
 - Windows
 
-## Similar projects
-
-* [cargo-cocoapods](https://github.com/bbqsrc/cargo-cocoapods) - for building .a files for all Apple platforms, and bundling for CocoaPods
-
 ## Local development
 
 `git clone` and then install the crate with `cargo`:
@@ -55,6 +54,10 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 ```bash
 cargo install --path .
 ```
+
+## Similar projects
+
+* [cargo-cocoapods](https://github.com/bbqsrc/cargo-cocoapods) - for building .a files for all Apple platforms, and bundling for CocoaPods
 
 ## License
 
