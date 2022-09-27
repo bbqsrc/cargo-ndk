@@ -46,11 +46,11 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ## Similar projects
 
-* [cargo-lipo](https://github.com/TimNN/cargo-lipo) - for building iOS universal Rust libraries
+* [cargo-cocoapods](https://github.com/bbqsrc/cargo-cocoapods) - for building .a files for all Apple platforms, and bundling for CocoaPods
 
-## Doing local modifications
+## Local development
 
-git clone and then install the local modifications you did:
+`git clone` and then install the crate with `cargo`:
 
 ```bash
 cargo install --path .

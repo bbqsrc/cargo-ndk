@@ -55,7 +55,7 @@ struct Args {
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
     if ndk_dir.exists() {
-        std::fs::read_dir(&ndk_dir)
+        std::fs::read_dir(ndk_dir)
             .ok()?
             .flat_map(Result::ok)
             .filter_map(|x| {

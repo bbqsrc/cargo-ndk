@@ -273,7 +273,7 @@ pub(crate) fn strip(
     log::debug!("strip: {}", &target_strip.display());
 
     Command::new(target_strip)
-        .arg(&bin_path)
+        .arg(bin_path)
         .status()
         .expect("strip crashed")
 }
