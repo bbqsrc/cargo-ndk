@@ -1,3 +1,7 @@
+## v2.12.2 - 2022-10-12
+
+- Fix: Revert `__ANDROID_API__` changes from v2.12.0.
+
 ## v2.12.1 - 2022-09-27
 
 - Fix: `build --profile <foo>` is now supported.
