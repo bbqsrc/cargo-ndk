@@ -377,13 +377,17 @@ pub(crate) fn run(args: Vec<String>) {
 
             log::trace!("Target path: {}", dir);
 
-            let so_files = std::fs::read_dir(&dir)
-                .ok()
-                .unwrap()
-                .flat_map(Result::ok)
-                .map(|x| x.path())
-                .filter(|x| x.extension() == Some(OsStr::new("so")))
-                .collect::<Vec<_>>();
+            let so_files = match std::fs::read_dir(&dir) {
+                Ok(dir) => dir
+                    .flat_map(Result::ok)
+                    .map(|x| x.path())
+                    .filter(|x| x.extension() == Some(OsStr::new("so")))
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    log::error!("{} {:?}", e, dir);
+                    std::process::exit(1);
+                }
+            };
 
             if so_files.is_empty() {
                 log::error!("No .so files found in path {:?}", dir);
