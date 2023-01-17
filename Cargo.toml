@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ndk"
-version = "2.12.2"
+version = "3.0.0-alpha.0"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"
@@ -15,17 +15,17 @@ categories = [
     "development-tools::cargo-plugins",
     "development-tools::build-utils"
 ]
-edition = "2018"
+edition = "2021"
 rust-version = "1.56"
 
 [badges]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-cargo_metadata = "0.15.0"
-env_logger = "0.9.1"
+cargo_metadata = "0.15.2"
+env_logger = "0.10.0"
 gumdrop = "0.8.1"
 log = "0.4.17"
 pathos = "0.3.0"
-serde = { version = "1.0.145", features = ["derive"] }
-toml = "0.5.9"
+serde = { version = "1.0.152", features = ["derive"] }
+toml = "0.5.10"

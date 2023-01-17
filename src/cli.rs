@@ -344,7 +344,6 @@ pub(crate) fn run(args: Vec<String>) {
 
         let status = crate::cargo::run(
             &working_dir,
-            &metadata.target_directory,
             &ndk_home,
             ndk_version.clone(),
             triple,
