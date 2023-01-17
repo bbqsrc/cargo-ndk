@@ -1,7 +1,11 @@
 # cargo-ndk - Build Rust code for Android
 
+<table>
+<tr><td>⚠️<td>The <code>main</code> branch currently only builds with rustc nightly.
+</table>
+
 ![CI](https://github.com/bbqsrc/cargo-ndk/actions/workflows/ci.yml/badge.svg)
-![Minimum supported Rust version: 1.56](https://img.shields.io/badge/MSRV-1.56-informational)
+![Minimum supported Rust version: 1.68](https://img.shields.io/badge/MSRV-1.68-informational)
 
 This cargo extension handles all the environment configuration needed for successfully building libraries
 for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
@@ -36,7 +40,7 @@ the `ANDROID_NDK_HOME` environment variable.
 cargo ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release 
 ```
 
-This specifies the Android targets to be built, the output directory to use for placing the `.so` files in the layout
+This specifies the Android targets to be built (ordinary triples are also supported), the output directory to use for placing the `.so` files in the layout
 expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
@@ -67,7 +71,3 @@ This project is licensed under either of
  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
-
----
-
-[Uyghurs are under attack in Xinjiang.](https://foreignpolicy.com/2019/12/30/xinjiang-crackdown-uighur-2019-what-happened/) The Chinese government is placing millions of people into indoctrination camps and engaging in forced labour.

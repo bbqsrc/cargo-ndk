@@ -1,7 +1,9 @@
-use std::env;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    env,
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use cargo_metadata::semver::Version;
 
@@ -109,7 +111,7 @@ pub(crate) fn run(
         .find(|e| e.1.trim() == "--")
         .map_or(cargo_args.len(), |e| e.0);
 
-    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(std::convert::Into::into).collect();
+    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
 
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd
