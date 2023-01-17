@@ -1,4 +1,5 @@
-use std::ffi::{OsStr, OsString};
+use std::env;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,11 +17,6 @@ const CLANG_EXT: &str = ".cmd";
 #[cfg(not(target_os = "windows"))]
 const CLANG_EXT: &str = "";
 
-#[cfg(target_os = "windows")]
-const BIN_EXT: &str = ".exe";
-#[cfg(not(target_os = "windows"))]
-const BIN_EXT: &str = "";
-
 fn clang_suffix(triple: &str, arch: &str, platform: u8, postfix: &str) -> PathBuf {
     let tool_triple = match triple {
         "arm-linux-androideabi" => "armv7a-linux-androideabi",
@@ -35,26 +31,6 @@ fn clang_suffix(triple: &str, arch: &str, platform: u8, postfix: &str) -> PathBu
         arch,
         "bin",
         &format!("{}{}-clang{}{}", tool_triple, platform, postfix, CLANG_EXT),
-    ]
-    .iter()
-    .collect()
-}
-
-fn toolchain_triple(triple: &str) -> &str {
-    match triple {
-        "armv7-linux-androideabi" => "arm-linux-androideabi",
-        _ => triple,
-    }
-}
-
-fn toolchain_suffix(triple: &str, arch: &str, bin: &str) -> PathBuf {
-    [
-        "toolchains",
-        "llvm",
-        "prebuilt",
-        arch,
-        "bin",
-        &format!("{}-{}{}", toolchain_triple(triple), bin, BIN_EXT),
     ]
     .iter()
     .collect()
@@ -80,7 +56,7 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
 pub(crate) fn run(
     dir: &Path,
     ndk_home: &Path,
-    version: Version,
+    version: &Version,
     triple: &str,
     platform: u8,
     cargo_args: &[String],
@@ -89,20 +65,21 @@ pub(crate) fn run(
 ) -> std::process::ExitStatus {
     log::debug!("Detected NDK version: {:?}", &version);
 
-    let target_linker = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, ""));
-    let target_cxx = Path::new(&ndk_home).join(clang_suffix(triple, ARCH, platform, "++"));
-    let target_sysroot = Path::new(&ndk_home).join(sysroot_suffix(ARCH));
-    let target_ar = if version.major >= 23 {
-        Path::new(&ndk_home).join(ndk23_tool(ARCH, "llvm-ar"))
-    } else {
-        Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "ar"))
-    };
+    if version.major < 23 {
+        log::error!("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.");
+        std::process::exit(1);
+    }
+
+    let target_linker = ndk_home.join(clang_suffix(triple, ARCH, platform, ""));
+    let target_cxx = ndk_home.join(clang_suffix(triple, ARCH, platform, "++"));
+    let target_sysroot = ndk_home.join(sysroot_suffix(ARCH));
+    let target_ar = ndk_home.join(ndk23_tool(ARCH, "llvm-ar"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
-    let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
     log::debug!("cargo: {}", &cargo_bin);
     log::debug!("{}={}", &ar_key, &target_ar.display());
@@ -121,7 +98,7 @@ pub(crate) fn run(
     log::debug!(
         "{}={}",
         &bindgen_clang_args_key,
-        &std::env::var(bindgen_clang_args_key.clone()).unwrap_or_default()
+        &std::env::var(&bindgen_clang_args_key).unwrap_or_default()
     );
     log::debug!("Args: {:?}", &cargo_args);
 
@@ -130,10 +107,9 @@ pub(crate) fn run(
         .iter()
         .enumerate()
         .find(|e| e.1.trim() == "--")
-        .map(|e| e.0)
-        .unwrap_or(cargo_args.len());
+        .map_or(cargo_args.len(), |e| e.0);
 
-    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(|arg| arg.into()).collect();
+    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(std::convert::Into::into).collect();
 
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd
@@ -159,14 +135,8 @@ pub(crate) fn run(
         Some(parent) => {
             if parent != dir {
                 log::debug!("Working directory does not match manifest-path");
-                cargo_args.insert(
-                    arg_insertion_position,
-                    cargo_manifest.as_os_str().to_owned(),
-                );
-                cargo_args.insert(
-                    arg_insertion_position,
-                    OsStr::new("--manifest-path").to_owned(),
-                );
+                cargo_args.insert(arg_insertion_position, cargo_manifest.into());
+                cargo_args.insert(arg_insertion_position, "--manifest-path".into());
             }
         }
         _ => {
@@ -174,23 +144,14 @@ pub(crate) fn run(
         }
     }
 
-    cargo_args.insert(arg_insertion_position, OsStr::new(triple).to_owned());
-    cargo_args.insert(arg_insertion_position, OsStr::new("--target").to_owned());
+    cargo_args.insert(arg_insertion_position, triple.into());
+    cargo_args.insert(arg_insertion_position, "--target".into());
 
     cargo_cmd.args(cargo_args).status().expect("cargo crashed")
 }
 
-pub(crate) fn strip(
-    ndk_home: &Path,
-    triple: &str,
-    bin_path: &Path,
-    version: Version,
-) -> std::process::ExitStatus {
-    let target_strip = if version.major >= 23 {
-        Path::new(&ndk_home).join(ndk23_tool(ARCH, "llvm-strip"))
-    } else {
-        Path::new(&ndk_home).join(toolchain_suffix(triple, ARCH, "strip"))
-    };
+pub(crate) fn strip(ndk_home: &Path, bin_path: &Path) -> std::process::ExitStatus {
+    let target_strip = ndk_home.join(ndk23_tool(ARCH, "llvm-strip"));
 
     log::debug!("strip: {}", &target_strip.display());
 

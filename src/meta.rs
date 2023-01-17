@@ -135,18 +135,16 @@ pub(crate) fn config(
 
     let package = match cargo_toml.package {
         Some(v) => v,
-        None => return Ok(Default::default()),
+        None => return Ok(crate::meta::Config::default()),
     };
 
     let ndk = package.metadata.and_then(|x| x.ndk).unwrap_or_default();
     let base_targets = ndk.targets;
 
     let targets = if matches!(build_mode, BuildMode::Release) {
-        ndk.release
-            .map(|x| x.targets)
-            .unwrap_or_else(|| base_targets)
+        ndk.release.map_or_else(|| base_targets, |x| x.targets)
     } else {
-        ndk.debug.map(|x| x.targets).unwrap_or_else(|| base_targets)
+        ndk.debug.map_or_else(|| base_targets, |x| x.targets)
     };
 
     Ok(Config {
@@ -154,12 +152,3 @@ pub(crate) fn config(
         targets,
     })
 }
-
-// [package.metadata.ndk]
-// platform = 21
-
-// # Uses the supported ABIs as listed in the NDK guides: https://developer.android.com/ndk/guides/abis
-// targets = ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
-
-// [package.metadata.ndk.release]
-// targets = ["armeabi-v7a", "arm64-v8a"]

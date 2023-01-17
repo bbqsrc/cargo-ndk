@@ -2,6 +2,7 @@ use std::{
     env,
     ffi::{OsStr, OsString},
     fmt::Display,
+    fs,
     io::{self, ErrorKind},
     path::{Path, PathBuf},
 };
@@ -23,11 +24,6 @@ struct Args {
     cargo_args: Vec<String>,
 
     #[options(
-        help = "triple for the target(s)\n                           Supported: armeabi-v7a arm64-v8a x86 x86_64."
-    )]
-    target: Vec<Target>,
-
-    #[options(
         meta = "DIR",
         help = "output to a jniLibs directory in the correct sub-directories"
     )]
@@ -39,11 +35,7 @@ struct Args {
     #[options(no_short, help = "disable stripping debug symbols", default = "false")]
     no_strip: bool,
 
-    #[options(
-        no_short,
-        meta = "PATH",
-        help = "path to Cargo.toml\n                           (limitations: https://github.com/rust-lang/cargo/issues/7856)"
-    )]
+    #[options(no_short, meta = "PATH", help = "path to Cargo.toml")]
     manifest_path: Option<PathBuf>,
 
     #[options(
@@ -52,13 +44,18 @@ struct Args {
         default = "false"
     )]
     bindgen: bool,
+
+    #[options(
+        help = "Triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
+    )]
+    target: Vec<Target>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
     if ndk_dir.exists() {
-        std::fs::read_dir(ndk_dir)
+        fs::read_dir(ndk_dir)
             .ok()?
-            .flat_map(Result::ok)
+            .filter_map(Result::ok)
             .filter_map(|x| {
                 let path = x.path();
                 path.components()
@@ -149,7 +146,7 @@ fn find_base_dir() -> PathBuf {
 }
 
 fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
-    let data = std::fs::read_to_string(path.join("source.properties"))?;
+    let data = fs::read_to_string(path.join("source.properties"))?;
     for line in data.split('\n') {
         if line.starts_with("Pkg.Revision") {
             let mut chunks = line.split(" = ");
@@ -260,7 +257,7 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
     let ndk_version = derive_ndk_version(&ndk_home).expect("could not resolve NDK version");
-    let working_dir = std::env::current_dir().expect("current directory could not be resolved");
+    let working_dir = env::current_dir().expect("current directory could not be resolved");
 
     // Attempt to smartly determine exactly what package is being worked with. The following is the manifest priority:
     //
@@ -306,7 +303,7 @@ pub(crate) fn run(args: Vec<String>) {
         "Exporting CARGO_NDK_CMAKE_TOOLCHAIN_PATH = {:?}",
         &cmake_toolchain_path
     );
-    std::env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
+    env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
 
     // Try command line, then config. Config falls back to defaults in any case.
     let targets = if !args.target.is_empty() {
@@ -318,21 +315,21 @@ pub(crate) fn run(args: Vec<String>) {
     let platform = args.platform.unwrap_or(config.platform);
 
     if let Some(output_dir) = args.output_dir.as_ref() {
-        std::fs::create_dir_all(output_dir).expect("failed to create output directory");
+        fs::create_dir_all(output_dir).expect("failed to create output directory");
     }
 
     log::info!("NDK API level: {}", platform);
-    std::env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
+    env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
     log::info!(
         "Building targets: {}",
         targets
             .iter()
-            .map(|x| x.to_string())
+            .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(", ")
     );
 
-    for target in targets.iter() {
+    for target in &targets {
         let triple = target.triple();
         log::info!("Building {} ({})", &target, &triple);
 
@@ -340,12 +337,12 @@ pub(crate) fn run(args: Vec<String>) {
             "Exporting CARGO_NDK_ANDROID_TARGET = {:?}",
             &target.to_string()
         );
-        std::env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
+        env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
 
         let status = crate::cargo::run(
             &working_dir,
             &ndk_home,
-            ndk_version.clone(),
+            &ndk_version,
             triple,
             platform,
             &args.cargo_args,
@@ -370,15 +367,15 @@ pub(crate) fn run(args: Vec<String>) {
         for target in targets {
             log::trace!("Target: {:?}", &target);
             let arch_output_dir = output_dir.join(target.to_string());
-            std::fs::create_dir_all(&arch_output_dir).unwrap();
+            fs::create_dir_all(&arch_output_dir).unwrap();
 
             let dir = out_dir.join(target.triple()).join(build_mode.to_string());
 
             log::trace!("Target path: {}", dir);
 
-            let so_files = match std::fs::read_dir(&dir) {
+            let so_files = match fs::read_dir(&dir) {
                 Ok(dir) => dir
-                    .flat_map(Result::ok)
+                    .filter_map(Result::ok)
                     .map(|x| x.path())
                     .filter(|x| x.extension() == Some(OsStr::new("so")))
                     .collect::<Vec<_>>(),
@@ -398,11 +395,10 @@ pub(crate) fn run(args: Vec<String>) {
             for so_file in so_files {
                 let dest = arch_output_dir.join(so_file.file_name().unwrap());
                 log::info!("{} -> {}", &so_file.display(), dest.display());
-                std::fs::copy(so_file, &dest).unwrap();
+                fs::copy(so_file, &dest).unwrap();
 
                 if !args.no_strip {
-                    let _ =
-                        crate::cargo::strip(&ndk_home, target.triple(), &dest, ndk_version.clone());
+                    let _ = crate::cargo::strip(&ndk_home, &dest);
                 }
             }
         }
