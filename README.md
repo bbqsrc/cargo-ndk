@@ -19,7 +19,7 @@ cargo install cargo-ndk
 You'll also need to install all the toolchains you intend to use. Simplest way is with the following:
 
 ```
-rustup target add \
+rustup +nightly target add \
     aarch64-linux-android \
     armv7-linux-androideabi \
     x86_64-linux-android \
@@ -37,7 +37,7 @@ the `ANDROID_NDK_HOME` environment variable.
 ### Example: building a library for 32-bit and 64-bit ARM systems
 
 ```
-cargo ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release 
+cargo +nightly ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release -Zbuild-std
 ```
 
 This specifies the Android targets to be built (ordinary triples are also supported), the output directory to use for placing the `.so` files in the layout
