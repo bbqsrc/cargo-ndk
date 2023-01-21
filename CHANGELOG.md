@@ -1,3 +1,7 @@
+## v2.12.3 - 2023-01-11
+
+- Fix: add missing Cargo.lock file
+
 ## v2.12.2 - 2022-10-12
 
 - Fix: Revert `__ANDROID_API__` changes from v2.12.0.
