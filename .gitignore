@@ -2,4 +2,3 @@ example/target/
 .DS_Store
 /target/
 **/*.rs.bk
-Cargo.lock
