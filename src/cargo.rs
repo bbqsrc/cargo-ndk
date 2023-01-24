@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
@@ -88,6 +89,54 @@ fn create_libgcc_linker_script_workaround(target_dir: &Utf8PathBuf) -> Result<Ut
     Ok(libgcc_workaround_dir)
 }
 
+enum RustFlags {
+    Empty,
+    Encoded(String),
+    Plain(String),
+}
+
+impl RustFlags {
+    fn from_env() -> Self {
+        if let Ok(encoded) = std::env::var("CARGO_ENCODED_RUSTFLAGS") {
+            return Self::Encoded(encoded);
+        }
+
+        if let Ok(plain) = std::env::var("RUSTFLAGS") {
+            return Self::Plain(plain);
+        }
+
+        Self::Empty
+    }
+
+    fn append(&mut self, flag: &str) {
+        match self {
+            RustFlags::Empty => {
+                *self = Self::Plain(flag.into());
+            }
+            RustFlags::Encoded(encoded) => {
+                if !encoded.is_empty() {
+                    encoded.push('\x1f');
+                }
+                encoded.push_str(flag);
+            }
+            RustFlags::Plain(plain) => {
+                if !plain.is_empty() {
+                    plain.push(' ');
+                }
+                plain.push_str(flag);
+            }
+        }
+    }
+
+    fn as_env_var(&self) -> Option<(&str, &str)> {
+        Some(match self {
+            RustFlags::Encoded(x) => ("CARGO_ENCODED_RUSTFLAGS", x),
+            RustFlags::Plain(x) => ("RUSTFLAGS", x),
+            RustFlags::Empty => return None,
+        })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     dir: &Path,
@@ -117,6 +166,11 @@ pub(crate) fn run(
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
+    log::trace!(
+        "Env: {:#?}",
+        std::env::vars().into_iter().collect::<BTreeMap<_, _>>()
+    );
+
     log::debug!("cargo: {}", &cargo_bin);
     log::debug!("{}={}", &ar_key, &target_ar.display());
     log::debug!("{}={}", &cc_key, &target_linker.display());
@@ -139,14 +193,7 @@ pub(crate) fn run(
     log::debug!("Args: {:?}", &cargo_args);
 
     // Read initial RUSTFLAGS
-    let mut rustflags = match std::env::var("CARGO_ENCODED_RUSTFLAGS") {
-        Ok(val) => val,
-        Err(std::env::VarError::NotPresent) => "".to_string(),
-        Err(std::env::VarError::NotUnicode(_)) => {
-            log::error!("RUSTFLAGS environment variable contains non-unicode characters");
-            std::process::exit(1);
-        }
-    };
+    let mut rustflags = RustFlags::from_env();
 
     // Insert Cargo arguments before any `--` arguments.
     let arg_insertion_position = cargo_args
@@ -188,13 +235,9 @@ pub(crate) fn run(
                 // Note that we don't use `cargo rustc` to pass custom library search paths to
                 // rustc and instead use `CARGO_ENCODED_RUSTFLAGS` because it affects the building
                 // of all transitive cdylibs (which all need this workaround).
-                if !rustflags.is_empty() {
-                    // Avoid creating an empty '' rustc argument
-                    rustflags.push('\x1f');
-                }
-                rustflags.push_str("-L\x1f");
-                rustflags.push_str(libdir.as_str());
-                cargo_cmd.env("CARGO_ENCODED_RUSTFLAGS", rustflags);
+                rustflags.append(&format!("-L{libdir}"));
+                let (k, v) = rustflags.as_env_var().unwrap();
+                cargo_cmd.env(k, v);
             }
             Err(e) => {
                 log::error!("Failed to create libgcc.a linker script workaround");
