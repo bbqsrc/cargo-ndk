@@ -1,6 +1,10 @@
-## v2.12.3 - 2023-01-11
+## v2.12.4 - 2023-01-24
 
-- Fix: add missing Cargo.lock file
+- Fix: Handle `CARGO_ENCODED_RUSTFLAGS` and `RUSTFLAGS` correctly.
+
+## v2.12.3 - 2023-01-22
+
+- Fix: add missing Cargo.lock file.
 
 ## v2.12.2 - 2022-10-12
 
