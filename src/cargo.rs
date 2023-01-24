@@ -116,7 +116,6 @@ pub(crate) fn run(
     let mut cargo_cmd = Command::new(cargo_bin);
     cargo_cmd
         .current_dir(dir)
-        .envs(std::env::vars_os())
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
