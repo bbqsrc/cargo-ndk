@@ -32,7 +32,7 @@ fn clang_suffix(triple: &str, arch: &str, platform: u8, postfix: &str) -> PathBu
         "prebuilt",
         arch,
         "bin",
-        &format!("{}{}-clang{}{}", tool_triple, platform, postfix, CLANG_EXT),
+        &format!("{tool_triple}{platform}-clang{postfix}{CLANG_EXT}"),
     ]
     .iter()
     .collect()

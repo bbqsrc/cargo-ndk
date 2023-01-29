@@ -277,7 +277,7 @@ pub(crate) fn run(args: Vec<String>) {
                     .packages
                     .iter()
                     .find(|p| &p.name == selected_package)
-                    .unwrap_or_else(|| panic!("unknown package: {}", selected_package));
+                    .unwrap_or_else(|| panic!("unknown package: {selected_package}"));
 
                 Some(selected_package.manifest_path.as_std_path().to_path_buf())
             } else {

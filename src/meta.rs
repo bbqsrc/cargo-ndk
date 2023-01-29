@@ -99,7 +99,7 @@ impl FromStr for Target {
             "aarch64-linux-android" => Target::Arm64V8a,
             "i686-linux-android" => Target::X86,
             "x86_64-linux-android" => Target::X86_64,
-            _ => return Err(format!("Unsupported target: '{}'", s)),
+            _ => return Err(format!("Unsupported target: '{s}'")),
         })
     }
 }
