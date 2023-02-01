@@ -133,7 +133,7 @@ pub(crate) fn run(
             &target_sysroot.display(),
             extra_include
         );
-        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.clone());
+        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.replace('\\', "/"));
         log::debug!("bindgen_args={}", bindgen_args);
     }
 

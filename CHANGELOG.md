@@ -1,3 +1,11 @@
+## v2.12.6 - 2023-02-01
+
+- Fix: stop `cargo_metadata` from downloading the entire world for no reason.
+
+## v2.12.5 - 2023-02-01
+
+- Fix: Handle bindgen clang arguments on Windows.
+
 ## v2.12.4 - 2023-01-24
 
 - Fix: Handle `CARGO_ENCODED_RUSTFLAGS` and `RUSTFLAGS` correctly.
