@@ -166,10 +166,7 @@ pub(crate) fn run(
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
-    log::trace!(
-        "Env: {:#?}",
-        std::env::vars().collect::<BTreeMap<_, _>>()
-    );
+    log::trace!("Env: {:#?}", std::env::vars().collect::<BTreeMap<_, _>>());
 
     log::debug!("cargo: {}", &cargo_bin);
     log::debug!("{}={}", &ar_key, &target_ar.display());
@@ -254,10 +251,7 @@ pub(crate) fn run(
             &target_sysroot.display(),
             extra_include
         );
-        cargo_cmd.env(
-            bindgen_clang_args_key,
-            bindgen_args.replace('\\', "/"),
-        );
+        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.replace('\\', "/"));
         log::debug!("bindgen_args={}", bindgen_args);
     }
 
