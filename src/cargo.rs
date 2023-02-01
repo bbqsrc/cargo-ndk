@@ -168,7 +168,7 @@ pub(crate) fn run(
 
     log::trace!(
         "Env: {:#?}",
-        std::env::vars().into_iter().collect::<BTreeMap<_, _>>()
+        std::env::vars().collect::<BTreeMap<_, _>>()
     );
 
     log::debug!("cargo: {}", &cargo_bin);
@@ -256,7 +256,7 @@ pub(crate) fn run(
         );
         cargo_cmd.env(
             bindgen_clang_args_key,
-            bindgen_args.clone().replace('\\', "/"),
+            bindgen_args.replace('\\', "/"),
         );
         log::debug!("bindgen_args={}", bindgen_args);
     }
