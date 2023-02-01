@@ -235,7 +235,7 @@ pub(crate) fn run(args: Vec<String>) {
         std::process::exit(1);
     }
 
-    let metadata = match MetadataCommand::new().exec() {
+    let metadata = match MetadataCommand::new().no_deps().exec() {
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed to load Cargo.toml in current directory.");
