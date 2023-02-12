@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ndk"
-version = "3.0.0-alpha.0"
+version = "3.0.0-alpha.1"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"
@@ -29,3 +29,4 @@ log = "0.4.17"
 pathos = "0.3.0"
 serde = { version = "1.0.152", features = ["derive"] }
 toml = "0.5.10"
+version_check = "0.9.4"

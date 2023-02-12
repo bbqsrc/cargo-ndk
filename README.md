@@ -1,7 +1,7 @@
 # cargo-ndk - Build Rust code for Android
 
 <table>
-<tr><td>⚠️<td>The <code>main</code> branch currently only builds with rustc nightly.
+<tr><td>⚠️<td>The <code>main</code> branch currently only builds with rustc beta.
 </table>
 
 ![CI](https://github.com/bbqsrc/cargo-ndk/actions/workflows/ci.yml/badge.svg)
@@ -13,13 +13,13 @@ for Android from a Rust codebase, with support for generating the correct `jniLi
 ## Installing
 
 ```
-cargo install cargo-ndk
+cargo +beta install cargo-ndk
 ```
 
 You'll also need to install all the toolchains you intend to use. Simplest way is with the following:
 
 ```
-rustup +nightly target add \
+rustup +beta target add \
     aarch64-linux-android \
     armv7-linux-androideabi \
     x86_64-linux-android \
@@ -37,7 +37,7 @@ the `ANDROID_NDK_HOME` environment variable.
 ### Example: building a library for 32-bit and 64-bit ARM systems
 
 ```
-cargo +nightly ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release -Zbuild-std
+cargo +beta ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release -Zbuild-std
 ```
 
 This specifies the Android targets to be built (ordinary triples are also supported), the output directory to use for placing the `.so` files in the layout
@@ -56,7 +56,7 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 `git clone` and then install the crate with `cargo`:
 
 ```bash
-cargo install --path .
+cargo +beta install --path .
 ```
 
 ## Similar projects
