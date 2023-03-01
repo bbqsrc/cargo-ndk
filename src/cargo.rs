@@ -76,10 +76,12 @@ pub(crate) fn run(
     let target_cxx = ndk_home.join(clang_suffix(triple, ARCH, platform, "++"));
     let target_sysroot = ndk_home.join(sysroot_suffix(ARCH));
     let target_ar = ndk_home.join(ndk23_tool(ARCH, "llvm-ar"));
+    let target_ranlib = ndk_home.join(ndk23_tool(ARCH, "llvm-ranlib"));
 
     let cc_key = format!("CC_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
+    let ranlib_key = format!("RANLIB_{}", &triple);
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
 
@@ -87,6 +89,7 @@ pub(crate) fn run(
     log::debug!("{}={}", &ar_key, &target_ar.display());
     log::debug!("{}={}", &cc_key, &target_linker.display());
     log::debug!("{}={}", &cxx_key, &target_cxx.display());
+    log::debug!("{}={}", &ranlib_key, &target_ranlib.display());
     log::debug!(
         "{}={}",
         cargo_env_target_cfg(triple, "ar"),
@@ -119,6 +122,7 @@ pub(crate) fn run(
         .env(ar_key, &target_ar)
         .env(cc_key, &target_linker)
         .env(cxx_key, &target_cxx)
+        .env(ranlib_key, &target_ranlib)
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
