@@ -1,3 +1,12 @@
+## v3.0.0 - 2023-03-11
+
+`libgcc` will no longer be linked against resultant libraries, and the workaround code in `cargo-ndk` has been removed.
+
+See https://blog.rust-lang.org/2023/01/09/android-ndk-update-r25.html for more information.
+
+- **Breaking change**: minimum supported version of Rust is now 1.68. 
+- Enhancement: added `RANLIB` environment variables
+
 ## v2.12.6 - 2023-02-01
 
 - Fix: stop `cargo_metadata` from downloading the entire world for no reason.
