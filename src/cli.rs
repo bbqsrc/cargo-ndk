@@ -203,7 +203,11 @@ pub(crate) fn run(args: Vec<String>) {
         BuildMode::Release
     } else if let Some(i) = args.iter().position(|x| x == "--profile") {
         if let Some(profile) = args.get(i + 1) {
-            BuildMode::Profile(profile.to_string())
+            if profile == "dev" {
+                BuildMode::Debug
+            } else {
+                BuildMode::Profile(profile.to_string())
+            }
         } else {
             BuildMode::Debug
         }
