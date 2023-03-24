@@ -1,3 +1,7 @@
+## v3.0.1 - 2023-03-24
+
+- Fix: specifying `--profile dev` will now look in the `debug` target directory as expected.
+
 ## v3.0.0 - 2023-03-11
 
 `libgcc` will no longer be linked against resultant libraries, and the workaround code in `cargo-ndk` has been removed.
