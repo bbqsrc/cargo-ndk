@@ -1,3 +1,7 @@
+## v2.12.7 - 2023-04-17
+
+- Fix: backported `--profile` handling
+
 ## v2.12.6 - 2023-02-01
 
 - Fix: stop `cargo_metadata` from downloading the entire world for no reason.
