@@ -187,6 +187,16 @@ impl Display for BuildMode {
     }
 }
 
+impl From<&str> for BuildMode {
+    fn from(profile: &str) -> Self {
+        match profile {
+            "dev" => BuildMode::Debug,
+            "release" => BuildMode::Release,
+            _ => BuildMode::Profile(profile.to_string()),
+        }
+    }
+}
+
 fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
@@ -209,17 +219,13 @@ pub(crate) fn run(args: Vec<String>) {
     let build_mode = if args.contains(&"--release".into()) {
         BuildMode::Release
     } else if let Some(i) = args.iter().position(|x| x == "--profile") {
-        if let Some(profile) = args.get(i + 1) {
-            if profile == "dev" {
-                BuildMode::Debug
-            } else {
-                BuildMode::Profile(profile.to_string())
-            }
-        } else {
-            BuildMode::Debug
-        }
+        args.get(i + 1)
+            .map(|p| BuildMode::from(p.as_str()))
+            .unwrap_or(BuildMode::Debug)
     } else {
-        BuildMode::Debug
+        args.iter()
+            .find_map(|a| a.strip_prefix("--profile=").map(BuildMode::from))
+            .unwrap_or(BuildMode::Debug)
     };
 
     log::trace!("build mode: {:?}", build_mode);
