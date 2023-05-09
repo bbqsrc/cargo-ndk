@@ -117,14 +117,49 @@ pub(crate) fn run(
     let mut cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
 
     let mut cargo_cmd = Command::new(cargo_bin);
+
+    #[cfg(not(windows))]
     cargo_cmd
         .current_dir(dir)
-        .env(ar_key, &target_ar)
-        .env(cc_key, &target_linker)
-        .env(cxx_key, &target_cxx)
-        .env(ranlib_key, &target_ranlib)
+        .env(&ar_key, &target_ar)
+        .env(&cc_key, &target_linker)
+        .env(&cxx_key, &target_cxx)
+        .env(&ranlib_key, &target_ranlib)
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
+
+    #[cfg(windows)]
+    let tmp = tempfile::tempdir().unwrap();
+
+    #[cfg(windows)]
+    {
+        let main = std::env::args().next().unwrap();
+
+        for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
+            std::fs::hard_link(&main, tmp.path().join(f).with_extension("exe")).unwrap();
+        }
+
+        cargo_cmd
+            .current_dir(dir)
+            .env(&ar_key, tmp.path().join("ar.exe"))
+            .env(&cc_key, tmp.path().join("cc.exe"))
+            .env(&cxx_key, tmp.path().join("cxx.exe"))
+            .env(&ranlib_key, tmp.path().join("ranlib.exe"))
+            .env(
+                cargo_env_target_cfg(triple, "ar"),
+                tmp.path().join("triple-ar.exe"),
+            )
+            .env(
+                cargo_env_target_cfg(triple, "linker"),
+                tmp.path().join("triple-linker.exe"),
+            )
+            .env("CARGO_NDK_AR", &target_ar)
+            .env("CARGO_NDK_CC", &target_linker)
+            .env("CARGO_NDK_CXX", &target_cxx)
+            .env("CARGO_NDK_RANLIB", &target_ranlib)
+            .env("CARGO_NDK_TRIPLE_AR", &target_ar)
+            .env("CARGO_NDK_TRIPLE_LINKER", &target_linker);
+    }
 
     let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
     if bindgen {
