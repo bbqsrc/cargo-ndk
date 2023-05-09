@@ -22,6 +22,7 @@ rust-version = "1.68"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+anyhow = "1.0.71"
 cargo_metadata = "0.15.2"
 env_logger = "0.10.0"
 gumdrop = "0.8.1"
@@ -30,3 +31,7 @@ pathos = "0.3.0"
 serde = { version = "1.0.152", features = ["derive"] }
 toml = "0.5.10"
 version_check = "0.9.4"
+
+[target.'cfg(windows)'.dependencies]
+tempfile = "3.5.0"
+wargs = "0.1.0"
