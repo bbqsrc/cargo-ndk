@@ -1,3 +1,9 @@
+## v3.1.0 - 2023-05-09
+
+- Workaround: NDK r25 on Windows does not work with Rust (https://github.com/bbqsrc/cargo-ndk/issues/92, https://github.com/android/ndk/issues/1856). `cargo-ndk` works around this by filtering the arguments before being passed to the NDK build scripts.
+
+I wish everyone a very good day, except Google.
+
 ## v3.0.1 - 2023-03-24
 
 - Fix: specifying `--profile dev` will now look in the `debug` target directory as expected.
