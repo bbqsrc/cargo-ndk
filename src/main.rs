@@ -7,12 +7,26 @@ mod meta;
 
 #[cfg(windows)]
 fn args_hack(cmd: &str) -> anyhow::Result<()> {
+    use std::os::windows::process::CommandExt;
+
     let args = wargs::command_line_to_argv(None)
         .skip(1)
         .collect::<Vec<_>>();
-    let mut process = std::process::Command::new(cmd).args(args).spawn()?;
 
-    Ok(process.wait().map(|_| ())?)
+    let mut process = std::process::Command::new(cmd)
+        .raw_arg(args.join(" "))
+        .spawn()?;
+
+    let status = process.wait()?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "Errored with code {}",
+            status.code().unwrap()
+        ))
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -34,7 +48,14 @@ fn main() -> anyhow::Result<()> {
 
         if main_arg != "cargo-ndk" {
             let maybe = main_arg.to_uppercase().replace('-', "_");
-            let app = std::env::var(format!("CARGO_NDK_{maybe}"))?;
+            let app = match std::env::var(format!("CARGO_NDK_{maybe}")) {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    log::error!("{}", err);
+                    panic!("{}", err);
+                }
+            };
+            log::debug!("Running command: {app}");
             return args_hack(&app);
         }
     }
