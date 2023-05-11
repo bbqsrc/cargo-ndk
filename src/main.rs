@@ -1,4 +1,5 @@
 use std::env;
+use std::env::args;
 use std::process::exit;
 
 mod cargo;
@@ -31,6 +32,12 @@ fn args_hack(cmd: &str) -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    // for version check.
+    if let Some(_) = args().find(|x| x == "--cargo-ndk-version"){
+        print!("{}", env!("CARGO_PKG_VERSION"));
+        exit(0);
+    }
 
     if env::var("CARGO").is_err() {
         eprintln!("This binary may only be called via `cargo ndk`.");
