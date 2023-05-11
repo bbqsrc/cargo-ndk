@@ -1,3 +1,7 @@
+## v3.1.1 - 2023-05-10
+
+- Fix: use `raw_args` for the Windows workaround subprocesses because random quotation marks still leak in
+
 ## v3.1.0 - 2023-05-09
 
 - Workaround: NDK r25 on Windows does not work with Rust (https://github.com/bbqsrc/cargo-ndk/issues/92, https://github.com/android/ndk/issues/1856). `cargo-ndk` works around this by filtering the arguments before being passed to the NDK build scripts.

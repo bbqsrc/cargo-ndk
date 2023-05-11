@@ -34,7 +34,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-ndk"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "anyhow",
  "cargo_metadata",
