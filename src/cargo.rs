@@ -129,29 +129,36 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
     #[cfg(windows)]
-    let tmp = tempfile::tempdir().unwrap();
+    let tmp = env::current_dir().unwrap().join("target/build");
 
     #[cfg(windows)]
     {
+        let tmp = tmp.as_path();
         let main = std::env::args().next().unwrap();
+        if !tmp.exists() {
+            std::fs::create_dir_all(tmp).unwrap();
+        }
 
         for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
-            std::fs::hard_link(&main, tmp.path().join(f).with_extension("exe")).unwrap();
+            let executable = tmp.join(f).with_extension("exe");
+            if !executable.exists(){
+                std::fs::copy(&main, executable).unwrap();
+            }
         }
 
         cargo_cmd
             .current_dir(dir)
-            .env(&ar_key, tmp.path().join("ar.exe"))
-            .env(&cc_key, tmp.path().join("cc.exe"))
-            .env(&cxx_key, tmp.path().join("cxx.exe"))
-            .env(&ranlib_key, tmp.path().join("ranlib.exe"))
+            .env(&ar_key, tmp.deref().join("ar.exe"))
+            .env(&cc_key, tmp.join("cc.exe"))
+            .env(&cxx_key, tmp.join("cxx.exe"))
+            .env(&ranlib_key, tmp.join("ranlib.exe"))
             .env(
                 cargo_env_target_cfg(triple, "ar"),
-                tmp.path().join("triple-ar.exe"),
+                tmp.join("triple-ar.exe"),
             )
             .env(
                 cargo_env_target_cfg(triple, "linker"),
-                tmp.path().join("triple-linker.exe"),
+                tmp.join("triple-linker.exe"),
             )
             .env("CARGO_NDK_AR", &target_ar)
             .env("CARGO_NDK_CC", &target_linker)
