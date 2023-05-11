@@ -148,7 +148,7 @@ pub(crate) fn run(
 
         cargo_cmd
             .current_dir(dir)
-            .env(&ar_key, tmp.deref().join("ar.exe"))
+            .env(&ar_key, tmp.join("ar.exe"))
             .env(&cc_key, tmp.join("cc.exe"))
             .env(&cxx_key, tmp.join("cxx.exe"))
             .env(&ranlib_key, tmp.join("ranlib.exe"))
