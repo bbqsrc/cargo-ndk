@@ -1,3 +1,7 @@
+## v3.1.2 - 2023-05-12
+
+- Enhancement: use `OUT_DIR` to hold the `cargo-ndk` wrapper executables on Windows (thanks @ScSofts)
+
 ## v3.1.1 - 2023-05-10
 
 - Fix: use `raw_args` for the Windows workaround subprocesses because random quotation marks still leak in
