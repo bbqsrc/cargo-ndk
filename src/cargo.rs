@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-use cargo_metadata::semver::Version;
+use cargo_metadata::{camino::Utf8PathBuf, semver::Version};
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -54,6 +54,13 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
 }
 
+#[cfg(windows)]
+fn cargo_target_dir(out_dir: &Utf8PathBuf) -> PathBuf {
+    std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| out_dir.clone().into_std_path_buf())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     dir: &Path,
@@ -64,6 +71,7 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
     bindgen: bool,
+    out_dir: &Utf8PathBuf,
 ) -> std::process::ExitStatus {
     log::debug!("Detected NDK version: {:?}", &version);
 
@@ -129,44 +137,47 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
     #[cfg(windows)]
-    let tmp = env::current_dir().unwrap().join(format!(
-        "target/.cargo-ndk-{}",
-        env!("CARGO_PKG_VERSION").to_string()
-    ));
+    let cargo_ndk_target_dir =
+        cargo_target_dir(out_dir).join(format!(".cargo-ndk-{}", env!("CARGO_PKG_VERSION")));
 
     #[cfg(windows)]
     {
-        let tmp = tmp.as_path();
         let main = std::env::args().next().unwrap();
-        if !tmp.exists() {
-            std::fs::create_dir_all(tmp).unwrap();
+        if !cargo_ndk_target_dir.exists() {
+            std::fs::create_dir_all(&cargo_ndk_target_dir).unwrap();
         }
 
         for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
-            let executable = tmp.join(f).with_extension("exe");
+            let executable = cargo_ndk_target_dir.join(f).with_extension("exe");
             if executable.exists() {
                 continue;
             }
-            // try hardlink.
-            if let Err(_) = std::fs::hard_link(&main, &executable) {
-                std::fs::copy(&main, executable)
-                    .expect(format!("Failed to create hardlink or copy for {f} !").as_str());
+
+            match std::fs::hard_link(&main, &executable)
+                .or_else(|_| std::fs::copy(&main, executable).map(|_| ()))
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("Failed to create hardlink or copy for '{f}'.");
+                    log::error!("{}", e);
+                    std::process::exit(1);
+                }
             }
         }
 
         cargo_cmd
             .current_dir(dir)
-            .env(&ar_key, tmp.join("ar.exe"))
-            .env(&cc_key, tmp.join("cc.exe"))
-            .env(&cxx_key, tmp.join("cxx.exe"))
-            .env(&ranlib_key, tmp.join("ranlib.exe"))
+            .env(&ar_key, cargo_ndk_target_dir.join("ar.exe"))
+            .env(&cc_key, cargo_ndk_target_dir.join("cc.exe"))
+            .env(&cxx_key, cargo_ndk_target_dir.join("cxx.exe"))
+            .env(&ranlib_key, cargo_ndk_target_dir.join("ranlib.exe"))
             .env(
                 cargo_env_target_cfg(triple, "ar"),
-                tmp.join("triple-ar.exe"),
+                cargo_ndk_target_dir.join("triple-ar.exe"),
             )
             .env(
                 cargo_env_target_cfg(triple, "linker"),
-                tmp.join("triple-linker.exe"),
+                cargo_ndk_target_dir.join("triple-linker.exe"),
             )
             .env("CARGO_NDK_AR", &target_ar)
             .env("CARGO_NDK_CC", &target_linker)

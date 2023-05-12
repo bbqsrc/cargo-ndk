@@ -261,6 +261,8 @@ pub(crate) fn run(args: Vec<String>) {
         }
     };
 
+    let out_dir = metadata.target_directory;
+
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
     let ndk_home = match derive_ndk_path() {
@@ -368,6 +370,7 @@ pub(crate) fn run(args: Vec<String>) {
             &args.cargo_args,
             &cargo_manifest,
             args.bindgen,
+            &out_dir,
         );
         let code = status.code().unwrap_or(-1);
 
@@ -378,8 +381,6 @@ pub(crate) fn run(args: Vec<String>) {
             std::process::exit(code);
         }
     }
-
-    let out_dir = metadata.target_directory;
 
     if let Some(output_dir) = args.output_dir.as_ref() {
         log::info!("Copying libraries to {}...", &output_dir.display());
