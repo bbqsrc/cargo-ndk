@@ -4,10 +4,8 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use std::process::Output;
 
 use cargo_metadata::semver::Version;
-use log::debug;
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -131,7 +129,10 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
     #[cfg(windows)]
-    let tmp = env::current_dir().unwrap().join("target/.cargo-ndk");
+    let tmp = env::current_dir().unwrap().join(format!(
+        "target/.cargo-ndk-{}",
+        env!("CARGO_PKG_VERSION").to_string()
+    ));
 
     #[cfg(windows)]
     {
@@ -143,31 +144,14 @@ pub(crate) fn run(
 
         for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
             let executable = tmp.join(f).with_extension("exe");
-            if executable.exists(){
-                // check for executable version.
-                if let Ok(Output{ stdout, .. }) = Command::new(&executable)
-                    .arg("--cargo-ndk-version")
-                    .output(){
-                    let ver_tools = Version::parse(String::from_utf8(stdout).unwrap().as_str());
-                    let current = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
-                    if let Ok(ver_tools) = ver_tools{
-                        if ver_tools == current {
-                            debug!("Ignoring {:?} ", &executable);
-                            continue;
-                        }else{
-                            debug!("Removing {:?} ", &executable);
-                            std::fs::remove_file(&executable)
-                                .expect(format!("Failed to remove {:?}", &executable).as_str());
-                        }
-                    }
-                }
+            if executable.exists() {
+                continue;
             }
             // try hardlink.
-            if let Err(_) = std::fs::hard_link(&main, &executable){
+            if let Err(_) = std::fs::hard_link(&main, &executable) {
                 std::fs::copy(&main, executable)
                     .expect(format!("Failed to create hardlink or copy for {f} !").as_str());
             }
-
         }
 
         cargo_cmd
