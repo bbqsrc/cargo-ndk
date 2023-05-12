@@ -71,6 +71,7 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
     bindgen: bool,
+    #[allow(unused_variables)]
     out_dir: &Utf8PathBuf,
 ) -> std::process::ExitStatus {
     log::debug!("Detected NDK version: {:?}", &version);
