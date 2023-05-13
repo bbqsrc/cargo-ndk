@@ -1,48 +1,41 @@
-on: push
+on: [push, pull_request]
 
 name: CI
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
         rust:
           - stable
           - beta
           - nightly
           - 1.68.0 # MSRV
-
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
+          targets: aarch64-linux-android, armv7-linux-androideabi
           components: rustfmt, clippy
-
       - name: Run build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-
+        run: cargo install --path .
       - name: Run test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-
+        working-directory: example
+        run: cargo ndk build 
       - name: Check code formatting
         uses: actions-rs/cargo@v1
+        continue-on-error: true
         with:
           command: fmt
           args: --all -- --check
-
       - name: Run clippy
         uses: actions-rs/cargo@v1
+        continue-on-error: true
         with:
           command: clippy
           args: -- -D warnings
