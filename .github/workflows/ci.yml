@@ -15,7 +15,7 @@ jobs:
           - 1.68.0 # MSRV
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -26,16 +26,10 @@ jobs:
         run: cargo install --path .
       - name: Run test
         working-directory: example
-        run: cargo ndk build 
+        run: cargo ndk build
       - name: Check code formatting
-        uses: actions-rs/cargo@v1
         continue-on-error: true
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
       - name: Run clippy
-        uses: actions-rs/cargo@v1
         continue-on-error: true
-        with:
-          command: clippy
-          args: -- -D warnings
+        run: cargo clippy -- -D warnings
