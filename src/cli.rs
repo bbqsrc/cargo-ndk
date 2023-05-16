@@ -35,6 +35,13 @@ struct Args {
     #[options(no_short, help = "disable stripping debug symbols", default = "false")]
     no_strip: bool,
 
+    #[options(
+        no_short,
+        help = "apply a quoting workaround to NDK .cmd wrappers on Windows (https://github.com/android/ndk/issues/1856)",
+        default = "false"
+    )]
+    apply_ndk_quote_workaround: bool,
+
     #[options(no_short, meta = "PATH", help = "path to Cargo.toml")]
     manifest_path: Option<PathBuf>,
 
@@ -370,6 +377,7 @@ pub(crate) fn run(args: Vec<String>) {
             &args.cargo_args,
             &cargo_manifest,
             args.bindgen,
+            args.apply_ndk_quote_workaround,
             &out_dir,
         );
         let code = status.code().unwrap_or(-1);

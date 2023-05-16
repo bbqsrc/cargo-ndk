@@ -1,11 +1,16 @@
 use std::{
     env,
     ffi::OsString,
+    fs::File,
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::Command,
 };
 
 use cargo_metadata::{camino::Utf8PathBuf, semver::Version};
+
+#[cfg(target_os = "windows")]
+const NDK_CMD_QUOTE_ISSUE: &str = "https://github.com/android/ndk/issues/1856";
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
@@ -55,10 +60,75 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
 }
 
 #[cfg(windows)]
-fn cargo_target_dir(out_dir: &Utf8PathBuf) -> PathBuf {
-    std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| out_dir.clone().into_std_path_buf())
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
+#[cfg(windows)]
+fn write_lines<P>(filename: P, lines: &[String]) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let file = File::create(filename)?;
+    for line in lines {
+        writeln!(&file, "{line}")?;
+    }
+    Ok(())
+}
+
+/// This fixes a quoting bug in the r25 NDK .cmd wrapper scripts for
+/// Windows, ref: https://github.com/android/ndk/issues/1856
+///
+/// Returns `true` if the workaround is required, else `false`
+#[cfg(windows)]
+fn ndk_r25_workaround_patch_cmd_script<P>(filename: P, apply: bool) -> bool
+where
+    P: AsRef<Path> + std::fmt::Debug,
+{
+    let mut patched = false;
+    let lines = read_lines(&filename).unwrap_or_else(|err| {
+        log::error!("Failed to read {filename:?} to check if quoting workaround required: {err:?}");
+        std::process::exit(1);
+    });
+
+    let lines: Vec<String> = lines
+        .filter_map(|line| {
+            if let Ok(line) = line {
+                if line == r#"if "%1" == "-cc1" goto :L"# {
+                    patched = true;
+                    Some(r#"if "%~1" == "-cc1" goto :L"#.to_string())
+                } else {
+                    Some(line)
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if patched {
+        if !apply {
+            log::error!(
+                "NDK .cmd wrapper needs quoting workaround ({NDK_CMD_QUOTE_ISSUE}): {filename:?}"
+            );
+            patched
+        } else {
+            if let Err(err) = write_lines(&filename, &lines) {
+                log::error!("Failed to patch {filename:?} to workaround quoting bug ({NDK_CMD_QUOTE_ISSUE}): {err:?}");
+                std::process::exit(1);
+            }
+            log::info!(
+                "Applied NDK .cmd wrapper quoting workaround ({NDK_CMD_QUOTE_ISSUE}): {filename:?}"
+            );
+            false
+        }
+    } else {
+        false
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -71,6 +141,7 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
     bindgen: bool,
+    apply_ndk_quote_workaround: bool,
     #[allow(unused_variables)] out_dir: &Utf8PathBuf,
 ) -> std::process::ExitStatus {
     log::debug!("Detected NDK version: {:?}", &version);
@@ -126,7 +197,6 @@ pub(crate) fn run(
 
     let mut cargo_cmd = Command::new(cargo_bin);
 
-    #[cfg(not(windows))]
     cargo_cmd
         .current_dir(dir)
         .env(&ar_key, &target_ar)
@@ -137,54 +207,15 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
     #[cfg(windows)]
-    let cargo_ndk_target_dir =
-        cargo_target_dir(out_dir).join(format!(".cargo-ndk-{}", env!("CARGO_PKG_VERSION")));
-
-    #[cfg(windows)]
     {
-        let main = std::env::args().next().unwrap();
-        if !cargo_ndk_target_dir.exists() {
-            std::fs::create_dir_all(&cargo_ndk_target_dir).unwrap();
-        }
-
-        for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
-            let executable = cargo_ndk_target_dir.join(f).with_extension("exe");
-            if executable.exists() {
-                continue;
-            }
-
-            match std::fs::hard_link(&main, &executable)
-                .or_else(|_| std::fs::copy(&main, executable).map(|_| ()))
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    log::error!("Failed to create hardlink or copy for '{f}'.");
-                    log::error!("{}", e);
-                    std::process::exit(1);
-                }
+        if version.major == 25 {
+            let needs_workaround =
+                ndk_r25_workaround_patch_cmd_script(target_linker, apply_ndk_quote_workaround)
+                    | ndk_r25_workaround_patch_cmd_script(target_cxx, true);
+            if needs_workaround {
+                log::warn!("Re-run with --apply-ndk-quote-workaround to patch NDK with quoting workaround ({NDK_CMD_QUOTE_ISSUE})");
             }
         }
-
-        cargo_cmd
-            .current_dir(dir)
-            .env(&ar_key, cargo_ndk_target_dir.join("ar.exe"))
-            .env(&cc_key, cargo_ndk_target_dir.join("cc.exe"))
-            .env(&cxx_key, cargo_ndk_target_dir.join("cxx.exe"))
-            .env(&ranlib_key, cargo_ndk_target_dir.join("ranlib.exe"))
-            .env(
-                cargo_env_target_cfg(triple, "ar"),
-                cargo_ndk_target_dir.join("triple-ar.exe"),
-            )
-            .env(
-                cargo_env_target_cfg(triple, "linker"),
-                cargo_ndk_target_dir.join("triple-linker.exe"),
-            )
-            .env("CARGO_NDK_AR", &target_ar)
-            .env("CARGO_NDK_CC", &target_linker)
-            .env("CARGO_NDK_CXX", &target_cxx)
-            .env("CARGO_NDK_RANLIB", &target_ranlib)
-            .env("CARGO_NDK_TRIPLE_AR", &target_ar)
-            .env("CARGO_NDK_TRIPLE_LINKER", &target_linker);
     }
 
     let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
