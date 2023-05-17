@@ -22,6 +22,7 @@ rust-version = "1.68"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+cargo = "0.69"
 anyhow = "1.0.71"
 cargo_metadata = "0.15.2"
 env_logger = "0.10.0"
