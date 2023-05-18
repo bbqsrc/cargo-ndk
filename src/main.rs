@@ -5,28 +5,40 @@ mod cargo;
 mod cli;
 mod meta;
 
-#[cfg(windows)]
-fn args_hack(cmd: &str) -> anyhow::Result<()> {
-    use std::os::windows::process::CommandExt;
+/// We are avoiding using the Clang wrapper scripts in the NDK because they have
+/// a quoting bug on Windows (https://github.com/android/ndk/issues/1856) and
+/// for consistency on other platforms, considering it's now generally
+/// recommended to avoid relying on these wrappers:
+/// https://android-review.googlesource.com/c/platform/ndk/+/2134712
+///
+/// Instead; we set cargo-ndk up as our rustc `_LINKER` as a way to be able to pass
+/// --target=<triple><api-level>
+///
+/// We do it this way because we can't modify rustflags before running `cargo
+/// build` without potentially trampling over flags that are configured via
+/// Cargo.
+fn clang_linker_wrapper() -> ! {
+    let mut args = std::env::args_os();
+    let _first = args.next().unwrap(); // ignore arg[0]
+    let clang = std::env::var("_CARGO_NDK_LINK_CLANG")
+        .expect("cargo-ndk rustc linker: didn't find _CARGO_NDK_LINK_CLANG env var");
+    let target = std::env::var("_CARGO_NDK_LINK_TARGET")
+        .expect("cargo-ndk rustc linker: didn't find _CARGO_NDK_LINK_TARGET env var");
 
-    let args = wargs::command_line_to_argv(None)
-        .skip(1)
-        .collect::<Vec<_>>();
+    let mut child = std::process::Command::new(&clang)
+        .arg(target)
+        .args(args)
+        .spawn()
+        .unwrap_or_else(|err| {
+            eprintln!("cargo-ndk: Failed to spawn {clang:?} as linker: {err}");
+            std::process::exit(1)
+        });
+    let status = child.wait().unwrap_or_else(|err| {
+        eprintln!("cargo-ndk (as linker): Failed to wait for {clang:?} to complete: {err}");
+        std::process::exit(1);
+    });
 
-    let mut process = std::process::Command::new(cmd)
-        .raw_arg(args.join(" "))
-        .spawn()?;
-
-    let status = process.wait()?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err(anyhow::anyhow!(
-            "Errored with code {}",
-            status.code().unwrap()
-        ))
-    }
+    std::process::exit(status.code().unwrap_or(1))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -37,27 +49,8 @@ fn main() -> anyhow::Result<()> {
         exit(1);
     }
 
-    #[cfg(windows)]
-    {
-        let main_arg = std::env::args().next().unwrap();
-        let main_arg = std::path::Path::new(&main_arg)
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap();
-
-        if main_arg != "cargo-ndk" {
-            let maybe = main_arg.to_uppercase().replace('-', "_");
-            let app = match std::env::var(format!("CARGO_NDK_{maybe}")) {
-                Ok(cmd) => cmd,
-                Err(err) => {
-                    log::error!("{}", err);
-                    panic!("{}", err);
-                }
-            };
-            log::debug!("Running command: {app}");
-            return args_hack(&app);
-        }
+    if std::env::var("_CARGO_NDK_LINK_TARGET").is_ok() {
+        clang_linker_wrapper();
     }
 
     let args = std::env::args().skip(2).collect::<Vec<_>>();

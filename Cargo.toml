@@ -31,7 +31,3 @@ pathos = "0.3.0"
 serde = { version = "1.0.152", features = ["derive"] }
 toml = "0.5.10"
 version_check = "0.9.4"
-
-[target.'cfg(windows)'.dependencies]
-tempfile = "3.5.0"
-wargs = "0.1.0"
