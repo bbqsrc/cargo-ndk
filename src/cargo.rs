@@ -14,31 +14,16 @@ const ARCH: &str = "linux-x86_64";
 #[cfg(target_os = "windows")]
 const ARCH: &str = "windows-x86_64";
 
-#[cfg(target_os = "windows")]
-const CLANG_EXT: &str = ".cmd";
-#[cfg(not(target_os = "windows"))]
-const CLANG_EXT: &str = "";
-
-fn clang_suffix(triple: &str, arch: &str, platform: u8, postfix: &str) -> PathBuf {
-    let tool_triple = match triple {
+fn clang_target(rust_target: &str, api_level: u8) -> String {
+    let target = match rust_target {
         "arm-linux-androideabi" => "armv7a-linux-androideabi",
         "armv7-linux-androideabi" => "armv7a-linux-androideabi",
-        _ => triple,
+        _ => rust_target,
     };
-
-    [
-        "toolchains",
-        "llvm",
-        "prebuilt",
-        arch,
-        "bin",
-        &format!("{tool_triple}{platform}-clang{postfix}{CLANG_EXT}"),
-    ]
-    .iter()
-    .collect()
+    format!("--target={target}{api_level}")
 }
 
-fn ndk23_tool(arch: &str, tool: &str) -> PathBuf {
+fn ndk_tool(arch: &str, tool: &str) -> PathBuf {
     ["toolchains", "llvm", "prebuilt", arch, "bin", tool]
         .iter()
         .collect()
@@ -52,13 +37,6 @@ fn sysroot_suffix(arch: &str) -> PathBuf {
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
-}
-
-#[cfg(windows)]
-fn cargo_target_dir(out_dir: &Utf8PathBuf) -> PathBuf {
-    std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| out_dir.clone().into_std_path_buf())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -80,15 +58,29 @@ pub(crate) fn run(
         std::process::exit(1);
     }
 
-    let target_linker = ndk_home.join(clang_suffix(triple, ARCH, platform, ""));
-    let target_cxx = ndk_home.join(clang_suffix(triple, ARCH, platform, "++"));
+    let clang_target = clang_target(triple, platform);
+
+    // Note: considering that there is an upstream quoting bug in the clang .cmd
+    // wrappers on Windows we intentionally avoid any wrapper scripts and
+    // instead pass a `--target=<triple><api_level>` argument to clang via a
+    // `RUSTC_WRAPPER` and for the cc crate via `CFLAGS_<triple>` and
+    // `CXXFLAGS_<triple>`
+    //
+    // See: https://github.com/android/ndk/issues/1856
+    //
+    let target_linker = ndk_home.join(ndk_tool(ARCH, "clang"));
+    let target_cflags = clang_target.clone();
+    let target_cxx = ndk_home.join(ndk_tool(ARCH, "clang++"));
+    let target_cxxflags = clang_target.clone();
     let target_sysroot = ndk_home.join(sysroot_suffix(ARCH));
-    let target_ar = ndk_home.join(ndk23_tool(ARCH, "llvm-ar"));
-    let target_ranlib = ndk_home.join(ndk23_tool(ARCH, "llvm-ranlib"));
+    let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
+    let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
 
     let cc_key = format!("CC_{}", &triple);
+    let cflags_key = format!("CFLAGS_{}", &triple);
     let ar_key = format!("AR_{}", &triple);
     let cxx_key = format!("CXX_{}", &triple);
+    let cxxflags_key = format!("CXXFLAGS_{}", &triple);
     let ranlib_key = format!("RANLIB_{}", &triple);
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
@@ -96,7 +88,9 @@ pub(crate) fn run(
     log::debug!("cargo: {}", &cargo_bin);
     log::debug!("{}={}", &ar_key, &target_ar.display());
     log::debug!("{}={}", &cc_key, &target_linker.display());
+    log::debug!("{}={}", &cflags_key, &target_cflags);
     log::debug!("{}={}", &cxx_key, &target_cxx.display());
+    log::debug!("{}={}", &cxxflags_key, &target_cxxflags);
     log::debug!("{}={}", &ranlib_key, &target_ranlib.display());
     log::debug!(
         "{}={}",
@@ -126,7 +120,6 @@ pub(crate) fn run(
 
     let mut cargo_cmd = Command::new(cargo_bin);
 
-    #[cfg(not(windows))]
     cargo_cmd
         .current_dir(dir)
         .env(&ar_key, &target_ar)
@@ -136,55 +129,23 @@ pub(crate) fn run(
         .env(cargo_env_target_cfg(triple, "ar"), &target_ar)
         .env(cargo_env_target_cfg(triple, "linker"), &target_linker);
 
-    #[cfg(windows)]
-    let cargo_ndk_target_dir =
-        cargo_target_dir(out_dir).join(format!(".cargo-ndk-{}", env!("CARGO_PKG_VERSION")));
+    // Set cargo-ndk itself as the rustc wrapper so we can add -Clink-arg=--target=<triple><api-level>
+    // after all other rustflags have been resolved by Cargo
+    //
+    // Note: it's not possible to pass the linker argument via CARGO_ENCODED_RUSTFLAGS because that could
+    // trample rustflags that are configured for the project and there's no practical way to read all
+    // user-configured rustflags from outside of cargo itself.
+    //
+    let self_path = std::fs::canonicalize(std::env::args().next().unwrap())
+        .expect("Failed to canonicalize absolute path to cargo-ndk");
+    log::debug!("RUSTC_WRAPPER={self_path:?}");
 
-    #[cfg(windows)]
-    {
-        let main = std::env::args().next().unwrap();
-        if !cargo_ndk_target_dir.exists() {
-            std::fs::create_dir_all(&cargo_ndk_target_dir).unwrap();
-        }
+    cargo_cmd.env("RUSTC_WRAPPER", &self_path);
+    cargo_cmd.env("_CARGO_NDK_RUSTC_TARGET", &clang_target); // Recognised by main() so we know when we're acting as a wrapper
 
-        for f in ["ar", "cc", "cxx", "ranlib", "triple-ar", "triple-linker"] {
-            let executable = cargo_ndk_target_dir.join(f).with_extension("exe");
-            if executable.exists() {
-                continue;
-            }
-
-            match std::fs::hard_link(&main, &executable)
-                .or_else(|_| std::fs::copy(&main, executable).map(|_| ()))
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    log::error!("Failed to create hardlink or copy for '{f}'.");
-                    log::error!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        }
-
-        cargo_cmd
-            .current_dir(dir)
-            .env(&ar_key, cargo_ndk_target_dir.join("ar.exe"))
-            .env(&cc_key, cargo_ndk_target_dir.join("cc.exe"))
-            .env(&cxx_key, cargo_ndk_target_dir.join("cxx.exe"))
-            .env(&ranlib_key, cargo_ndk_target_dir.join("ranlib.exe"))
-            .env(
-                cargo_env_target_cfg(triple, "ar"),
-                cargo_ndk_target_dir.join("triple-ar.exe"),
-            )
-            .env(
-                cargo_env_target_cfg(triple, "linker"),
-                cargo_ndk_target_dir.join("triple-linker.exe"),
-            )
-            .env("CARGO_NDK_AR", &target_ar)
-            .env("CARGO_NDK_CC", &target_linker)
-            .env("CARGO_NDK_CXX", &target_cxx)
-            .env("CARGO_NDK_RANLIB", &target_ranlib)
-            .env("CARGO_NDK_TRIPLE_AR", &target_ar)
-            .env("CARGO_NDK_TRIPLE_LINKER", &target_linker);
+    // Make sure we daisy chain to any wrapper that is already configured by RUSTC_WRAPPER
+    if let Ok(rustc_wrapper) = std::env::var("RUSTC_WRAPPER") {
+        cargo_cmd.env("_CARGO_NDK_RUSTC_WRAPPER", rustc_wrapper);
     }
 
     let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
@@ -218,7 +179,7 @@ pub(crate) fn run(
 }
 
 pub(crate) fn strip(ndk_home: &Path, bin_path: &Path) -> std::process::ExitStatus {
-    let target_strip = ndk_home.join(ndk23_tool(ARCH, "llvm-strip"));
+    let target_strip = ndk_home.join(ndk_tool(ARCH, "llvm-strip"));
 
     log::debug!("strip: {}", &target_strip.display());
 

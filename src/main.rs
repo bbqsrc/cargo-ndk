@@ -5,28 +5,55 @@ mod cargo;
 mod cli;
 mod meta;
 
-#[cfg(windows)]
-fn args_hack(cmd: &str) -> anyhow::Result<()> {
-    use std::os::windows::process::CommandExt;
+/// We are avoiding using the Clang wrapper scripts in the NDK because they have
+/// a quoting bug on Windows (https://github.com/android/ndk/issues/1856) and
+/// for consistency on other platforms, considering it's now generally
+/// recommended to avoid relying on these wrappers:
+/// https://android-review.googlesource.com/c/platform/ndk/+/2134712
+///
+/// Instead; we set cargo-ndk up as a RUSTC_WRAPPER as a way to be able to pass
+/// "-Clink-arg=--target=<triple>"
+///
+/// We do it this way because we can't modify rustflags before running `cargo
+/// build` without potentially trampling over flags that are configured via
+/// Cargo.
+fn rustc_wrapper() -> ! {
+    let is_cross = std::env::args().any(|arg| arg.starts_with("--target"));
 
-    let args = wargs::command_line_to_argv(None)
-        .skip(1)
-        .collect::<Vec<_>>();
+    let mut args = std::env::args_os();
+    let _first = args
+        .next()
+        .expect("cargo-ndk rustc wrapper: expected at least two argument"); // ignore arg[0]
+    let rustc = args
+        .next()
+        .expect("cargo-ndk rustc wrapper: expected at least one argument"); // The first argument is the "real" rustc, followed by arguments
+    let target_arg = std::env::var("_CARGO_NDK_RUSTC_TARGET")
+        .expect("cargo-ndk rustc wrapper didn't find _CARGO_NDK_RUSTC_TARGET env var");
 
-    let mut process = std::process::Command::new(cmd)
-        .raw_arg(args.join(" "))
-        .spawn()?;
-
-    let status = process.wait()?;
-
-    if status.success() {
-        Ok(())
+    // If RUSTC_WRAPPER was already set in the environment then we daisy chain to the original
+    // wrapper, otherwise we run rustc specified via args[1]
+    let mut cmd = if let Ok(wrapper_rustc) = std::env::var("_CARGO_NDK_WRAPPED_RUSTC") {
+        let mut cmd = std::process::Command::new(wrapper_rustc);
+        cmd.arg(&rustc);
+        cmd
     } else {
-        Err(anyhow::anyhow!(
-            "Errored with code {}",
-            status.code().unwrap()
-        ))
+        std::process::Command::new(&rustc)
+    };
+
+    if is_cross {
+        cmd.arg(format!("-Clink-arg={target_arg}"));
     }
+
+    let mut child = cmd.args(args).spawn().unwrap_or_else(|err| {
+        eprintln!("cargo-ndk: Failed to spawn {rustc:?} as rustc wrapper: {err}");
+        std::process::exit(1)
+    });
+    let status = child.wait().unwrap_or_else(|err| {
+        eprintln!("cargo-ndk (as rustc wrapper): Failed to wait for {rustc:?} to complete: {err}");
+        std::process::exit(1);
+    });
+
+    std::process::exit(status.code().unwrap_or(1))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -37,27 +64,8 @@ fn main() -> anyhow::Result<()> {
         exit(1);
     }
 
-    #[cfg(windows)]
-    {
-        let main_arg = std::env::args().next().unwrap();
-        let main_arg = std::path::Path::new(&main_arg)
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap();
-
-        if main_arg != "cargo-ndk" {
-            let maybe = main_arg.to_uppercase().replace('-', "_");
-            let app = match std::env::var(format!("CARGO_NDK_{maybe}")) {
-                Ok(cmd) => cmd,
-                Err(err) => {
-                    log::error!("{}", err);
-                    panic!("{}", err);
-                }
-            };
-            log::debug!("Running command: {app}");
-            return args_hack(&app);
-        }
+    if std::env::var("_CARGO_NDK_RUSTC_TARGET").is_ok() {
+        rustc_wrapper();
     }
 
     let args = std::env::args().skip(2).collect::<Vec<_>>();
