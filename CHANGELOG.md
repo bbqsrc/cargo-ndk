@@ -1,3 +1,7 @@
+## v3.2.0 - 2023-05-24
+
+- Fix: linker workaround made more robust and fixing too many args issues (thanks @rib)
+
 ## v3.1.2 - 2023-05-12
 
 - Enhancement: use `OUT_DIR` to hold the `cargo-ndk` wrapper executables on Windows (thanks @ScSofts)
