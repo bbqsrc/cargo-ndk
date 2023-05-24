@@ -18,8 +18,7 @@ mod meta;
 /// build` without potentially trampling over flags that are configured via
 /// Cargo.
 fn clang_linker_wrapper() -> ! {
-    let mut args = std::env::args_os();
-    let _first = args.next().unwrap(); // ignore arg[0]
+    let args = std::env::args_os().skip(1);
     let clang = std::env::var("_CARGO_NDK_LINK_CLANG")
         .expect("cargo-ndk rustc linker: didn't find _CARGO_NDK_LINK_CLANG env var");
     let target = std::env::var("_CARGO_NDK_LINK_TARGET")
