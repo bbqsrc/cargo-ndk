@@ -126,7 +126,9 @@ pub(crate) fn run(
     cargo_cmd
         .current_dir(dir)
         .env(&cc_key, &target_cc)
+        .env(&cflags_key, &target_cflags)
         .env(&cxx_key, &target_cxx)
+        .env(&cxxflags_key, &target_cxxflags)
         .env(&ar_key, &target_ar)
         .env(&ranlib_key, &target_ranlib)
         .env(cargo_ar_key, &target_ar)
