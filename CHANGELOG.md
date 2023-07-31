@@ -1,3 +1,7 @@
+## v3.2.1 - 2023-07-31
+
+- Fix: pass CFLAGS and CXXFLAGS to cargo correctly (thanks @rib)
+
 ## v3.2.0 - 2023-05-24
 
 - Fix: linker workaround made more robust and fixing too many args issues (thanks @rib)
