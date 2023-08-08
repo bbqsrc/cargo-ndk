@@ -97,7 +97,6 @@ pub(crate) fn run(
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
-    let bindgen_clang_args = std::env::var(&bindgen_clang_args_key).unwrap_or_default();
 
     log::debug!("{cc_key}={target_cc:?}");
     log::debug!("{cflags_key}={target_cflags}");
@@ -109,7 +108,6 @@ pub(crate) fn run(
     log::debug!("cargo: {cargo_bin}");
     log::debug!("{cargo_ar_key}={target_ar:?}");
     log::debug!("{cargo_linker_key}={target_linker:?}");
-    log::debug!("{bindgen_clang_args_key}={bindgen_clang_args}");
     log::debug!("Args: {:?}", &cargo_args);
 
     // Insert Cargo arguments before any `--` arguments.
@@ -143,8 +141,9 @@ pub(crate) fn run(
             &target_sysroot.display(),
             extra_include
         );
-        cargo_cmd.env(bindgen_clang_args_key, bindgen_args.replace('\\', "/"));
-        log::debug!("bindgen_args={}", bindgen_args);
+        let bindgen_clang_args = bindgen_args.replace('\\', "/");
+        log::debug!("{bindgen_clang_args_key}={bindgen_clang_args:?}");
+        cargo_cmd.env(bindgen_clang_args_key, bindgen_clang_args);
     }
 
     match dir.parent() {
