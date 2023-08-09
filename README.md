@@ -41,6 +41,10 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
 
+### Providing environment variables for C dependencies
+
+`cargo-ndk` derives which environment variables to read the same way as the `cc` crate.
+
 ### Supported hosts
 
 - Linux
