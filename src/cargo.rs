@@ -39,6 +39,24 @@ fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
 }
 
+#[inline]
+fn env_var_with_key(key: String) -> Option<(String, String)> {
+    env::var(&key).map(|value| (key, value)).ok()
+}
+
+// Derived from getenv_with_target_prefixes in `cc` crate.
+fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
+    let triple_u = triple.replace('-', "_");
+    let most_specific_key = format!("{}_{}", var_base, triple);
+
+    env_var_with_key(most_specific_key.to_string())
+        .or_else(|| env_var_with_key(format!("{}_{}", var_base, triple_u)))
+        .or_else(|| env_var_with_key(format!("TARGET_{}", var_base)))
+        .or_else(|| env_var_with_key(var_base.to_string()))
+        .map(|(key, value)| (key, Some(value)))
+        .unwrap_or_else(|| (most_specific_key, None))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     dir: &Path,
@@ -72,16 +90,16 @@ pub(crate) fn run(
     // configured for the project and there's no practical way to read all
     // user-configured rustflags from outside of cargo itself.
     //
-    let self_path = std::fs::canonicalize(std::env::args().next().unwrap())
+    let self_path = std::fs::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk");
 
     // Environment variables for the `cc` crate
-    let cc_key = format!("CC_{}", &triple);
-    let cflags_key = format!("CFLAGS_{}", &triple);
-    let cxx_key = format!("CXX_{}", &triple);
-    let cxxflags_key = format!("CXXFLAGS_{}", &triple);
-    let ar_key = format!("AR_{}", &triple);
-    let ranlib_key = format!("RANLIB_{}", &triple);
+    let (cc_key, _cc_value) = cc_env("CC", &triple);
+    let (cflags_key, cflags_value) = cc_env("CFLAGS", &triple);
+    let (cxx_key, _cxx_value) = cc_env("CXX", &triple);
+    let (cxxflags_key, cxxflags_value) = cc_env("CXXFLAGS", &triple);
+    let (ar_key, _ar_value) = cc_env("AR", &triple);
+    let (ranlib_key, _ranlib_value) = cc_env("RANLIB", &triple);
 
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
@@ -90,22 +108,28 @@ pub(crate) fn run(
 
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
-    let target_cflags = clang_target.clone();
+    let target_cflags = match cflags_value {
+        Some(v) => format!("{clang_target} {v}"),
+        None => clang_target.to_string(),
+    };
     let target_cxx = ndk_home.join(ndk_tool(ARCH, "clang++"));
-    let target_cxxflags = clang_target.clone();
+    let target_cxxflags = match cxxflags_value {
+        Some(v) => format!("{clang_target} {v}"),
+        None => clang_target.to_string(),
+    };
     let target_sysroot = ndk_home.join(sysroot_suffix(ARCH));
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
 
     log::debug!("{cc_key}={target_cc:?}");
-    log::debug!("{cflags_key}={target_cflags}");
+    log::debug!("{cflags_key}={target_cflags:?}");
     log::debug!("{cxx_key}={target_cxx:?}");
-    log::debug!("{cxxflags_key}={target_cxxflags}");
+    log::debug!("{cxxflags_key}={target_cxxflags:?}");
     log::debug!("{ar_key}={target_ar:?}");
     log::debug!("{ranlib_key}={target_ranlib:?}");
 
-    log::debug!("cargo: {cargo_bin}");
+    log::debug!("cargo: {cargo_bin:?}");
     log::debug!("{cargo_ar_key}={target_ar:?}");
     log::debug!("{cargo_linker_key}={target_linker:?}");
     log::debug!("Args: {:?}", &cargo_args);
