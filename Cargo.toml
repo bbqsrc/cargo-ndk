@@ -24,10 +24,26 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 anyhow = "1.0.71"
 cargo_metadata = "0.15.2"
-env_logger = "0.10.0"
+dunce = "1.0.4"
 gumdrop = "0.8.1"
-log = "0.4.17"
+is-terminal = "0.4.9"
+libc = "0.2.147"
 pathos = "0.3.0"
 serde = { version = "1.0.152", features = ["derive"] }
+termcolor = "1.2.0"
 toml = "0.5.10"
 version_check = "0.9.4"
+
+[target.'cfg(windows)'.dependencies]
+fwdansi = "1.1.0"
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.48"
+features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_Security",
+  "Win32_System_Console",
+  "Win32_System_Threading",
+  "Win32_System_JobObjects",
+]

@@ -7,6 +7,8 @@ use std::{
 
 use cargo_metadata::{camino::Utf8PathBuf, semver::Version};
 
+use crate::shell::Shell;
+
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
 #[cfg(target_os = "linux")]
@@ -59,6 +61,7 @@ fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
+    shell: &mut Shell,
     dir: &Path,
     ndk_home: &Path,
     version: &Version,
@@ -69,10 +72,8 @@ pub(crate) fn run(
     bindgen: bool,
     #[allow(unused_variables)] out_dir: &Utf8PathBuf,
 ) -> std::process::ExitStatus {
-    log::debug!("Detected NDK version: {:?}", &version);
-
     if version.major < 23 {
-        log::error!("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.");
+        shell.error("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.").unwrap();
         std::process::exit(1);
     }
 
@@ -94,12 +95,12 @@ pub(crate) fn run(
         .expect("Failed to canonicalize absolute path to cargo-ndk");
 
     // Environment variables for the `cc` crate
-    let (cc_key, _cc_value) = cc_env("CC", &triple);
-    let (cflags_key, cflags_value) = cc_env("CFLAGS", &triple);
-    let (cxx_key, _cxx_value) = cc_env("CXX", &triple);
-    let (cxxflags_key, cxxflags_value) = cc_env("CXXFLAGS", &triple);
-    let (ar_key, _ar_value) = cc_env("AR", &triple);
-    let (ranlib_key, _ranlib_value) = cc_env("RANLIB", &triple);
+    let (cc_key, _cc_value) = cc_env("CC", triple);
+    let (cflags_key, cflags_value) = cc_env("CFLAGS", triple);
+    let (cxx_key, _cxx_value) = cc_env("CXX", triple);
+    let (cxxflags_key, cxxflags_value) = cc_env("CXXFLAGS", triple);
+    let (ar_key, _ar_value) = cc_env("AR", triple);
+    let (ranlib_key, _ranlib_value) = cc_env("RANLIB", triple);
 
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
@@ -122,17 +123,56 @@ pub(crate) fn run(
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
 
-    log::debug!("{cc_key}={target_cc:?}");
-    log::debug!("{cflags_key}={target_cflags:?}");
-    log::debug!("{cxx_key}={target_cxx:?}");
-    log::debug!("{cxxflags_key}={target_cxxflags:?}");
-    log::debug!("{ar_key}={target_ar:?}");
-    log::debug!("{ranlib_key}={target_ranlib:?}");
+    shell
+        .very_verbose(|shell| {
+            shell.status_with_color(
+                "Exporting",
+                format!("{cc_key}={target_cc:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cflags_key}={target_cflags:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cxx_key}={target_cxx:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cxxflags_key}={target_cxxflags:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{ar_key}={target_ar:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{ranlib_key}={target_ranlib:?}"),
+                termcolor::Color::Cyan,
+            )?;
 
-    log::debug!("cargo: {cargo_bin:?}");
-    log::debug!("{cargo_ar_key}={target_ar:?}");
-    log::debug!("{cargo_linker_key}={target_linker:?}");
-    log::debug!("Args: {:?}", &cargo_args);
+            shell.status_with_color(
+                "Exporting",
+                format!("{cargo_ar_key}={target_ar:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cargo_linker_key}={target_linker:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Invoking",
+                format!("cargo ({cargo_bin}) with args: {cargo_args:?}"),
+                termcolor::Color::Cyan,
+            )
+        })
+        .unwrap();
 
     // Insert Cargo arguments before any `--` arguments.
     let arg_insertion_position = cargo_args
@@ -166,20 +206,20 @@ pub(crate) fn run(
             extra_include
         );
         let bindgen_clang_args = bindgen_args.replace('\\', "/");
-        log::debug!("{bindgen_clang_args_key}={bindgen_clang_args:?}");
+        // log::debug!("{bindgen_clang_args_key}={bindgen_clang_args:?}");
         cargo_cmd.env(bindgen_clang_args_key, bindgen_clang_args);
     }
 
     match dir.parent() {
         Some(parent) => {
             if parent != dir {
-                log::debug!("Working directory does not match manifest-path");
+                // log::debug!("Working directory does not match manifest-path");
                 cargo_args.insert(arg_insertion_position, cargo_manifest.into());
                 cargo_args.insert(arg_insertion_position, "--manifest-path".into());
             }
         }
         _ => {
-            log::warn!("Parent of current working directory does not exist");
+            // log::warn!("Parent of current working directory does not exist");
         }
     }
 
@@ -192,7 +232,7 @@ pub(crate) fn run(
 pub(crate) fn strip(ndk_home: &Path, bin_path: &Path) -> std::process::ExitStatus {
     let target_strip = ndk_home.join(ndk_tool(ARCH, "llvm-strip"));
 
-    log::debug!("strip: {}", &target_strip.display());
+    // log::debug!("strip: {}", &target_strip.display());
 
     Command::new(target_strip)
         .arg(bin_path)

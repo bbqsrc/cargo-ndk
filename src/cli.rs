@@ -5,19 +5,23 @@ use std::{
     fs,
     io::{self, ErrorKind},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use cargo_metadata::{semver::Version, MetadataCommand};
 use gumdrop::Options;
 
-use crate::meta::Target;
+use crate::{
+    meta::Target,
+    shell::{Shell, Verbosity},
+};
 
 #[derive(Debug, Options)]
 struct Args {
     #[options(help = "show help information")]
     help: bool,
 
-    #[options(help = "print version")]
+    #[options(long = "version", help = "print version")]
     version: bool,
 
     #[options(free, help = "args to be passed to cargo")]
@@ -75,19 +79,21 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
 ///
 /// Additionally checks that if any other variables are set then they should
 /// be consistent with the first variable, otherwise a warning is printed.
-fn find_first_consistent_var_set<'a>(vars: &'a [&str]) -> Option<(&'a str, OsString)> {
+fn find_first_consistent_var_set<'a>(
+    vars: &'a [&str],
+    shell: &mut Shell,
+) -> Option<(&'a str, OsString)> {
     let mut first_var_set = None;
     for var in vars {
         if let Some(path) = env::var_os(var) {
             if let Some((first_var, first_path)) = first_var_set.as_ref() {
                 if *first_path != path {
-                    log::warn!(
-                        "Environment variable `{} = {:#?}` doesn't match `{} = {:#?}`",
-                        first_var,
-                        first_path,
-                        var,
-                        path
-                    );
+                    shell
+                        .warn(format!(
+                            "Environment variable `{} = {:#?}` doesn't match `{} = {:#?}`",
+                            first_var, first_path, var, path
+                        ))
+                        .unwrap();
                 }
                 continue;
             }
@@ -99,25 +105,25 @@ fn find_first_consistent_var_set<'a>(vars: &'a [&str]) -> Option<(&'a str, OsStr
 }
 
 /// Return a path to a discovered NDK and string describing how it was found
-fn derive_ndk_path() -> Option<(String, PathBuf)> {
+fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
     let ndk_vars = [
         "ANDROID_NDK_HOME",
         "ANDROID_NDK_ROOT",
         "ANDROID_NDK_PATH",
         "NDK_HOME",
     ];
-    if let Some((var_name, path)) = find_first_consistent_var_set(&ndk_vars) {
+    if let Some((var_name, path)) = find_first_consistent_var_set(&ndk_vars, shell) {
         let path = PathBuf::from(path);
         return highest_version_ndk_in_path(&path)
             .or(Some(path))
-            .map(|path| (var_name.to_string(), path));
+            .map(|path| (path, var_name.to_string()));
     }
 
     let sdk_vars = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_SDK_HOME"];
-    if let Some((var_name, sdk_path)) = find_first_consistent_var_set(&sdk_vars) {
+    if let Some((var_name, sdk_path)) = find_first_consistent_var_set(&sdk_vars, shell) {
         let ndk_path = PathBuf::from(&sdk_path).join("ndk");
         if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
-            return Some((var_name.to_string(), v));
+            return Some((v, var_name.to_string()));
         }
     }
 
@@ -125,12 +131,11 @@ fn derive_ndk_path() -> Option<(String, PathBuf)> {
     let base_dir = find_base_dir();
 
     let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
-    log::trace!("Default NDK dir: {:?}", &ndk_dir);
-    highest_version_ndk_in_path(&ndk_dir).map(|path| ("Standard Location".to_string(), path))
+    highest_version_ndk_in_path(&ndk_dir).map(|path| (path, "standard location".to_string()))
 }
 
 fn print_usage() {
-    println!("cargo-ndk -- Brendan Molloy <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk [OPTIONS] <CARGO_ARGS>\n");
+    println!("cargo-ndk <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk [OPTIONS] <CARGO_ARGS>\n");
     println!("{}", Args::usage());
 }
 
@@ -145,7 +150,7 @@ fn find_base_dir() -> PathBuf {
     base_dir
 }
 
-fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
+fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
     let data = fs::read_to_string(path.join("source.properties"))?;
     for line in data.split('\n') {
         if line.starts_with("Pkg.Revision") {
@@ -156,18 +161,17 @@ fn derive_ndk_version(path: &Path) -> Result<Version, io::Error> {
             let version = chunks
                 .next()
                 .ok_or_else(|| io::Error::new(ErrorKind::Other, "No chunk"))?;
-            let version = Version::parse(version).map_err(|_e| {
-                log::error!("Could not parse NDK version. Got: '{}'", version);
-                io::Error::new(ErrorKind::Other, "Bad version")
-            })?;
+            let version = match Version::parse(version) {
+                Ok(v) => v,
+                Err(_e) => {
+                    return Err(anyhow::anyhow!(format!("Could not parse NDK version. Got: '{}'", version)));
+                }
+            };
             return Ok(version);
         }
     }
 
-    Err(io::Error::new(
-        ErrorKind::Other,
-        "Could not find Pkg.Revision in given path",
-    ))
+    Err(anyhow::anyhow!("Could not find Pkg.Revision in given path"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,18 +205,28 @@ fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
 
-pub(crate) fn run(args: Vec<String>) {
-    log::trace!("Args: {:?}", args);
-
+pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
     if args.is_empty() || args.contains(&"-h".into()) || args.contains(&"--help".into()) {
         print_usage();
-
         std::process::exit(0);
     }
 
+    let verbosity = if args.contains(&"-q".into()) {
+        Verbosity::Quiet
+    } else if args.contains(&"-vv".into()) {
+        Verbosity::VeryVerbose
+    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
+        Verbosity::Verbose
+    } else {
+        Verbosity::Normal
+    };
+
+    let mut shell = Shell::new();
+    shell.set_verbosity(verbosity);
+
     if !is_supported_rustc_version() {
-        log::error!("Rust compiler is too old and not supported by cargo-ndk.");
-        log::error!("Upgrade Rust to at least v1.68.0.");
+        shell.error("Rust compiler is too old and not supported by cargo-ndk.")?;
+        shell.note("Upgrade Rust to at least v1.68.0.")?;
         std::process::exit(1);
     }
 
@@ -228,8 +242,6 @@ pub(crate) fn run(args: Vec<String>) {
             .unwrap_or(BuildMode::Debug)
     };
 
-    log::trace!("build mode: {:?}", build_mode);
-
     let args = match Args::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
         Ok(args) if args.help => {
             print_usage();
@@ -241,22 +253,22 @@ pub(crate) fn run(args: Vec<String>) {
         }
         Ok(args) => args,
         Err(e) => {
-            log::error!("{}", e);
+            shell.error(e)?;
             std::process::exit(2);
         }
     };
 
     if args.cargo_args.is_empty() {
-        log::error!("No args found to pass to cargo!");
-        log::error!("You still need to specify build arguments to cargo to achieve anything. :)");
+        shell.error("No args found to pass to cargo!")?;
+        shell.note("You still need to specify build arguments to cargo to achieve anything. :)")?;
         std::process::exit(1);
     }
 
     let metadata = match MetadataCommand::new().no_deps().exec() {
         Ok(v) => v,
         Err(e) => {
-            log::error!("Failed to load Cargo.toml in current directory.");
-            log::error!("{}", e);
+            shell.error("Failed to load Cargo.toml in current directory.")?;
+            shell.error(e)?;
             std::process::exit(1);
         }
     };
@@ -265,20 +277,36 @@ pub(crate) fn run(args: Vec<String>) {
 
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
-    let ndk_home = match derive_ndk_path() {
-        Some((how, v)) => {
-            log::info!("Using NDK at path: {} ({})", v.display(), how);
-            v
+    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
+        Some((path, method)) => {
+            (path, method)
         }
         None => {
-            log::error!("Could not find any NDK.");
-            log::error!(
+            shell.error("Could not find any NDK.")?;
+            shell.note(
                 "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
-            );
+            )?;
             std::process::exit(1);
         }
     };
-    let ndk_version = derive_ndk_version(&ndk_home).expect("could not resolve NDK version");
+
+    let ndk_version = match derive_ndk_version(&ndk_home) {
+        Ok(v) => v,
+        Err(e) => {
+            shell.error(format!("Error detecting NDK version for path {}", ndk_home.display()))?;
+            shell.error(e)?;
+            std::process::exit(1);
+        }
+    };
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Detected",
+            format!("NDK v{} ({}) [{}]", ndk_version, ndk_home.display(), ndk_detection_method),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
     let working_dir = env::current_dir().expect("current directory could not be resolved");
 
     // Attempt to smartly determine exactly what package is being worked with. The following is the manifest priority:
@@ -311,7 +339,8 @@ pub(crate) fn run(args: Vec<String>) {
     let config = match crate::meta::config(&cargo_manifest, &build_mode) {
         Ok(v) => v,
         Err(e) => {
-            log::error!("Failed loading manifest: {}", e);
+            shell.error("Failed loading manifest")?;
+            shell.error(e)?;
             std::process::exit(1);
         }
     };
@@ -321,10 +350,13 @@ pub(crate) fn run(args: Vec<String>) {
         .join("cmake")
         .join("android.toolchain.cmake");
 
-    log::debug!(
-        "Exporting CARGO_NDK_CMAKE_TOOLCHAIN_PATH = {:?}",
-        &cmake_toolchain_path
-    );
+    shell.very_verbose(|shell| {
+        shell.status_with_color(
+            "Exporting",
+            format!("CARGO_NDK_CMAKE_TOOLCHAIN_PATH={:?}", &cmake_toolchain_path),
+            termcolor::Color::Cyan,
+        )
+    })?;
     env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
 
     // Try command line, then config. Config falls back to defaults in any case.
@@ -340,28 +372,48 @@ pub(crate) fn run(args: Vec<String>) {
         fs::create_dir_all(output_dir).expect("failed to create output directory");
     }
 
-    log::info!("NDK API level: {}", platform);
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Setting",
+            format!("Android SDK platform level to {}", platform),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
     env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
-    log::info!(
-        "Building targets: {}",
-        targets
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Building",
+            format!(
+                "targets ({})",
+                targets
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    let start_time = Instant::now();
 
     for target in &targets {
         let triple = target.triple();
-        log::info!("Building {} ({})", &target, &triple);
+        shell.status("Building", format!("{} ({})", &target, &triple))?;
 
-        log::debug!(
-            "Exporting CARGO_NDK_ANDROID_TARGET = {:?}",
-            &target.to_string()
-        );
+        shell.very_verbose(|shell| {
+            shell.status_with_color(
+                "Exporting",
+                format!("CARGO_NDK_ANDROID_TARGET={:?}", &target.to_string()),
+                termcolor::Color::Cyan,
+            )
+        })?;
+
         env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
 
         let status = crate::cargo::run(
+            &mut shell,
             &working_dir,
             &ndk_home,
             &ndk_version,
@@ -375,24 +427,29 @@ pub(crate) fn run(args: Vec<String>) {
         let code = status.code().unwrap_or(-1);
 
         if code != 0 {
-            log::info!("If the build failed due to a missing target, you can run this command:");
-            log::info!("");
-            log::info!("    rustup target install {}", triple);
+            shell.note("If the build failed due to a missing target, you can run this command:")?;
+            shell.note("")?;
+            shell.note(format!("    rustup target install {}", triple))?;
             std::process::exit(code);
         }
     }
 
     if let Some(output_dir) = args.output_dir.as_ref() {
-        log::info!("Copying libraries to {}...", &output_dir.display());
+        shell.concise(|shell| {
+            shell.status(
+                "Copying",
+                format!(
+                    "libraries to {}",
+                    dunce::canonicalize(output_dir).unwrap().display()
+                ),
+            )
+        })?;
 
-        for target in targets {
-            log::trace!("Target: {:?}", &target);
+        for target in targets.iter() {
             let arch_output_dir = output_dir.join(target.to_string());
             fs::create_dir_all(&arch_output_dir).unwrap();
 
             let dir = out_dir.join(target.triple()).join(build_mode.to_string());
-
-            log::trace!("Target path: {}", dir);
 
             let so_files = match fs::read_dir(&dir) {
                 Ok(dir) => dir
@@ -401,27 +458,62 @@ pub(crate) fn run(args: Vec<String>) {
                     .filter(|x| x.extension() == Some(OsStr::new("so")))
                     .collect::<Vec<_>>(),
                 Err(e) => {
-                    log::error!("{} {:?}", e, dir);
+                    shell.error(format!("Could not read directory: {:?}", dir))?;
+                    shell.error(e)?;
                     std::process::exit(1);
                 }
             };
 
             if so_files.is_empty() {
-                log::error!("No .so files found in path {:?}", dir);
-                log::error!("Did you set the crate-type in Cargo.toml to include 'cdylib'?");
-                log::error!("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.");
+                shell.error(format!("No .so files found in path {:?}", dir))?;
+                shell.error("Did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
+                shell.error("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.")?;
                 std::process::exit(1);
             }
 
             for so_file in so_files {
                 let dest = arch_output_dir.join(so_file.file_name().unwrap());
-                log::info!("{} -> {}", &so_file.display(), dest.display());
+                shell.verbose(|shell| {
+                    shell.status(
+                        "Copying",
+                        format!(
+                            "{} -> {}",
+                            &dunce::canonicalize(&so_file).unwrap().display(),
+                            &dunce::canonicalize(&dest).unwrap().display()
+                        ),
+                    )
+                })?;
                 fs::copy(so_file, &dest).unwrap();
 
                 if !args.no_strip {
+                    shell.verbose(|shell| {
+                        shell.status(
+                            "Stripping",
+                            format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
+                        )
+                    })?;
                     let _ = crate::cargo::strip(&ndk_home, &dest);
                 }
             }
         }
     }
+
+    shell.verbose(|shell| {
+        let duration = start_time.elapsed();
+        let secs = duration.as_secs();
+        let d = if secs >= 60 {
+            format!("{}m {:02}s", secs / 60, secs % 60)
+        } else {
+            format!("{}.{:02}s", secs, duration.subsec_nanos() / 10_000_000)
+        };
+        let t = targets
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        shell.status("Finished", format!("targets ({t}) in {d}",))
+    })?;
+
+    Ok(())
 }
