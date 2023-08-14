@@ -1,5 +1,9 @@
 ## Changelog
 
+### v3.2.2 - 2023-08-14
+
+- Fix: pass CFLAGS, CXXFLAGS and related variables as per `cc` crate behaviour
+
 ### v3.2.1 - 2023-07-31
 
 - Fix: pass CFLAGS and CXXFLAGS to cargo correctly (thanks @rib)
