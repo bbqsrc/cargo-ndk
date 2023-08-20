@@ -4,6 +4,7 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
+    panic::{self, PanicInfo},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -164,7 +165,10 @@ fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
             let version = match Version::parse(version) {
                 Ok(v) => v,
                 Err(_e) => {
-                    return Err(anyhow::anyhow!(format!("Could not parse NDK version. Got: '{}'", version)));
+                    return Err(anyhow::anyhow!(format!(
+                        "Could not parse NDK version. Got: '{}'",
+                        version
+                    )));
                 }
             };
             return Ok(version);
@@ -205,6 +209,52 @@ fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
 
+fn panic_hook(info: &PanicInfo<'_>) {
+    fn _attempt_shell(lines: &[String]) -> Result<(), anyhow::Error> {
+        let mut shell = Shell::new();
+        shell.error("cargo-ndk panicked! Generating report...")?;
+        for line in lines {
+            println!("{}", line);
+        }
+        shell.error("end of panic report. Please report the above to: <https://github.com/bbqsrc/cargo-ndk/issues>")?;
+        Ok(())
+    }
+
+    let location = info.location().unwrap();
+    let msg = match info.payload().downcast_ref::<&'static str>() {
+        Some(s) => *s,
+        None => match info.payload().downcast_ref::<String>() {
+            Some(s) => &s[..],
+            None => "Box<dyn Any>",
+        },
+    };
+
+    let env = std::env::vars()
+        .map(|(x, y)| format!("{}={:?}", x, y))
+        .collect::<Vec<_>>();
+    let args = std::env::args().collect::<Vec<_>>();
+
+    let lines = vec![
+        format!("location: {location}"),
+        format!("message: {msg}"),
+        format!("args: {args:?}"),
+        format!(
+            "pwd: {}",
+            std::env::current_dir()
+                .map(|x| x.display().to_string())
+                .unwrap_or_else(|_| "<unknown>".to_string())
+        ),
+        format!("env:\n  {}", env.join("\n  ")),
+    ];
+
+    if _attempt_shell(&lines).is_err() {
+        // Last ditch attempt
+        for line in lines {
+            eprintln!("{}", line);
+        }
+    }
+}
+
 pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
     if args.is_empty() || args.contains(&"-h".into()) || args.contains(&"--help".into()) {
         print_usage();
@@ -223,6 +273,10 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     let mut shell = Shell::new();
     shell.set_verbosity(verbosity);
+
+    if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
+        panic::set_hook(Box::new(panic_hook));
+    }
 
     if !is_supported_rustc_version() {
         shell.error("Rust compiler is too old and not supported by cargo-ndk.")?;
@@ -278,9 +332,7 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
     let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
-        Some((path, method)) => {
-            (path, method)
-        }
+        Some((path, method)) => (path, method),
         None => {
             shell.error("Could not find any NDK.")?;
             shell.note(
@@ -293,7 +345,10 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
     let ndk_version = match derive_ndk_version(&ndk_home) {
         Ok(v) => v,
         Err(e) => {
-            shell.error(format!("Error detecting NDK version for path {}", ndk_home.display()))?;
+            shell.error(format!(
+                "Error detecting NDK version for path {}",
+                ndk_home.display()
+            ))?;
             shell.error(e)?;
             std::process::exit(1);
         }
@@ -302,7 +357,12 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.verbose(|shell| {
         shell.status_with_color(
             "Detected",
-            format!("NDK v{} ({}) [{}]", ndk_version, ndk_home.display(), ndk_detection_method),
+            format!(
+                "NDK v{} ({}) [{}]",
+                ndk_version,
+                ndk_home.display(),
+                ndk_detection_method
+            ),
             termcolor::Color::Cyan,
         )
     })?;
@@ -479,7 +539,7 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
                         format!(
                             "{} -> {}",
                             &dunce::canonicalize(&so_file).unwrap().display(),
-                            &dunce::canonicalize(&dest).unwrap().display()
+                            &dest.display()
                         ),
                     )
                 })?;
