@@ -129,7 +129,7 @@ impl Target {
 pub(crate) fn config(
     cargo_toml_path: &Path,
     build_mode: &BuildMode,
-) -> Result<Config, std::io::Error> {
+) -> Result<Config, anyhow::Error> {
     let toml_string = std::fs::read_to_string(cargo_toml_path)?;
     let cargo_toml: CargoToml = toml::from_str(&toml_string)?;
 

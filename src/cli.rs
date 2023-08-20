@@ -271,8 +271,15 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
         Verbosity::Normal
     };
 
+    let color = args
+        .iter()
+        .position(|x| x == "--color")
+        .and_then(|p| args.get(p + 1))
+        .map(|x| &**x);
+
     let mut shell = Shell::new();
     shell.set_verbosity(verbosity);
+    shell.set_color_choice(color)?;
 
     if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
         panic::set_hook(Box::new(panic_hook));
