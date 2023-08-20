@@ -1,5 +1,12 @@
 ## Changelog
 
+### v3.3.0 - 2023-08-20
+
+- Enhancement: console output now uses `cargo`'s formatter (and looks prettier)
+- Enhancement: panics will print a dump for simplifying bug reports
+
+`RUST_LOG` is therefore now ignored. Use `cargo`'s usual `-v` and `-vv` for verbosity control.
+
 ### v3.2.2 - 2023-08-14
 
 - Fix: pass CFLAGS, CXXFLAGS and related variables as per `cc` crate behaviour
