@@ -437,6 +437,16 @@ pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     if let Some(output_dir) = args.output_dir.as_ref() {
         fs::create_dir_all(output_dir).expect("failed to create output directory");
+
+        shell.verbose(|shell| {
+            shell.status_with_color(
+                "Exporting",
+                format!("CARGO_NDK_OUTPUT_PATH={output_dir:?}"),
+                termcolor::Color::Cyan,
+            )
+        })?;
+
+        std::env::set_var("CARGO_NDK_OUTPUT_PATH", &output_dir);
     }
 
     shell.verbose(|shell| {

@@ -30,7 +30,9 @@ If you have installed the NDK with Android Studio to its default location, `carg
 the most recent NDK version and use it. This can be overriden by specifying the path to the NDK root directory in
 the `ANDROID_NDK_HOME` environment variable.
 
-### Example: building a library for 32-bit and 64-bit ARM systems
+### Examples
+
+#### Building a library for 32-bit and 64-bit ARM systems
 
 ```
 cargo ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release
@@ -41,6 +43,37 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
 
+#### Linking against and copying `libc++_shared.so` into the relevant places in the output directory
+
+Create a `build.rs` in your project with the following:
+
+```rust
+use std::{env, path::{Path, PathBuf}};
+
+fn main() {
+    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "android" {
+        android();
+    }
+}
+
+fn android() {
+    println!("cargo:rustc-link-lib=c++_shared");
+
+    if let Ok(output_path) = env::var("CARGO_NDK_OUTPUT_PATH") {
+        let sysroot_libs_path =
+            PathBuf::from(env::var_os("CARGO_NDK_SYSROOT_LIBS_PATH").unwrap());
+        let lib_path = sysroot_libs_path.join("libc++_shared.so");
+        std::fs::copy(
+            lib_path,
+            Path::new(&output_path)
+                .join(&env::var("CARGO_NDK_ANDROID_TARGET").unwrap())
+                .join("libc++_shared.so"),
+        )
+        .unwrap();
+    }
+}
+```
+
 ### Controlling verbosity
 
 Add `-v` or `-vv` as you ordinarily would after the cargo command.
@@ -49,6 +82,16 @@ Add `-v` or `-vv` as you ordinarily would after the cargo command.
 
 `cargo-ndk` derives which environment variables to read the same way as the `cc` crate.
 
+### `cargo-ndk`-specific environment variables
+
+These environment variables are exported for use in build scripts and other downstream use cases:
+
+- `CARGO_NDK_ANDROID_PLATFORM`: the Android platform API number as an integer (e.g. `21`)
+- `CARGO_NDK_ANDROID_TARGET`: the Android name for the build target (e.g. `armeabi-v7a`)
+- `CARGO_NDK_OUTPUT_PATH`: the output path as specified with the `-o` flag
+- `CARGO_NDK_SYSROOT_PATH`: path to the sysroot inside the Android NDK
+- `CARGO_NDK_SYSROOT_TARGET`: the target name for the files inside the sysroot (differs slightly from the standard LLVM triples)
+- `CARGO_NDK_SYSROOT_LIBS_PATH`: path to the libraries inside the sysroot with the given sysroot target (e.g. `$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`)
 ## Supported hosts
 
 - Linux

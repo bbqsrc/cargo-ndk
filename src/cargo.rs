@@ -25,6 +25,14 @@ fn clang_target(rust_target: &str, api_level: u8) -> String {
     format!("--target={target}{api_level}")
 }
 
+fn sysroot_target(rust_target: &str) -> &str {
+    let target = match rust_target {
+        "armv7-linux-androideabi" => "arm-linux-androideabi",
+        _ => rust_target,
+    };
+    target
+}
+
 fn ndk_tool(arch: &str, tool: &str) -> PathBuf {
     ["toolchains", "llvm", "prebuilt", arch, "bin", tool]
         .iter()
@@ -118,7 +126,15 @@ pub(crate) fn run(
         Some(v) => format!("{clang_target} {v}"),
         None => clang_target.to_string(),
     };
-    let target_sysroot = ndk_home.join(sysroot_suffix(ARCH));
+    let cargo_ndk_sysroot_path_key = "CARGO_NDK_SYSROOT_PATH";
+    let cargo_ndk_sysroot_path = ndk_home.join(sysroot_suffix(ARCH));
+    let cargo_ndk_sysroot_target_key = "CARGO_NDK_SYSROOT_TARGET";
+    let cargo_ndk_sysroot_target = sysroot_target(triple);
+    let cargo_ndk_sysroot_libs_path_key = "CARGO_NDK_SYSROOT_LIBS_PATH";
+    let cargo_ndk_sysroot_libs_path = cargo_ndk_sysroot_path
+        .join("usr")
+        .join("lib")
+        .join(cargo_ndk_sysroot_target);
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
@@ -167,6 +183,21 @@ pub(crate) fn run(
                 termcolor::Color::Cyan,
             )?;
             shell.status_with_color(
+                "Exporting",
+                format!("{cargo_ndk_sysroot_path_key}={cargo_ndk_sysroot_path:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cargo_ndk_sysroot_libs_path_key}={cargo_ndk_sysroot_libs_path:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
+                "Exporting",
+                format!("{cargo_ndk_sysroot_target_key}={cargo_ndk_sysroot_target:?}"),
+                termcolor::Color::Cyan,
+            )?;
+            shell.status_with_color(
                 "Invoking",
                 format!("cargo ({cargo_bin}) with args: {cargo_args:?}"),
                 termcolor::Color::Cyan,
@@ -195,14 +226,24 @@ pub(crate) fn run(
         .env(&ranlib_key, &target_ranlib)
         .env(cargo_ar_key, &target_ar)
         .env(cargo_linker_key, &target_linker)
+        .env(cargo_ndk_sysroot_path_key, &cargo_ndk_sysroot_path)
+        .env(
+            cargo_ndk_sysroot_libs_path_key,
+            &cargo_ndk_sysroot_libs_path,
+        )
+        .env(cargo_ndk_sysroot_target_key, &cargo_ndk_sysroot_target)
         .env("_CARGO_NDK_LINK_TARGET", &clang_target) // Recognized by main() so we know when we're acting as a wrapper
         .env("_CARGO_NDK_LINK_CLANG", &target_cc);
 
-    let extra_include = format!("{}/usr/include/{}", &target_sysroot.display(), triple);
+    let extra_include = format!(
+        "{}/usr/include/{}",
+        &cargo_ndk_sysroot_path.display(),
+        &cargo_ndk_sysroot_target
+    );
     if bindgen {
         let bindgen_args = format!(
             "--sysroot={} -I{}",
-            &target_sysroot.display(),
+            &cargo_ndk_sysroot_path.display(),
             extra_include
         );
         let bindgen_clang_args = bindgen_args.replace('\\', "/");
