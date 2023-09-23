@@ -1,5 +1,9 @@
 ## Changelog
 
+### v3.4.0 - 2023-09-23
+
+- Enhancement: add additional environment variables for sysroot directories (see README.md)
+
 ### v3.3.0 - 2023-08-20
 
 - Enhancement: console output now uses `cargo`'s formatter (and looks prettier)
