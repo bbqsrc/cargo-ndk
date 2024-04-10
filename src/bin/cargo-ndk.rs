@@ -1,11 +1,6 @@
 use std::env;
 use std::process::exit;
 
-mod cargo;
-mod cli;
-mod meta;
-mod shell;
-
 /// We are avoiding using the Clang wrapper scripts in the NDK because they have
 /// a quoting bug on Windows (https://github.com/android/ndk/issues/1856) and
 /// for consistency on other platforms, considering it's now generally
@@ -53,5 +48,5 @@ fn main() -> anyhow::Result<()> {
 
     let args = std::env::args().skip(2).collect::<Vec<_>>();
 
-    cli::run(args)
+    cargo_ndk::cli::run(args)
 }

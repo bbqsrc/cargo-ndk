@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     env,
     ffi::{OsStr, OsString},
     fmt::Display,
@@ -13,9 +14,37 @@ use cargo_metadata::{semver::Version, MetadataCommand};
 use gumdrop::Options;
 
 use crate::{
-    meta::Target,
+    cargo::{build_env, clang_target},
+    meta::{Ndk, Target},
     shell::{Shell, Verbosity},
 };
+
+#[derive(Debug, Options)]
+struct ArgsEnv {
+    #[options(help = "show help information")]
+    help: bool,
+
+    #[options(long = "version", help = "print version")]
+    version: bool,
+
+    #[options(help = "platform (also known as API level)")]
+    platform: Option<u8>,
+
+    #[options(
+        no_short,
+        help = "set bindgen-specific environment variables (BINDGEN_EXTRA_CLANG_ARGS_*) when building",
+        default = "false"
+    )]
+    bindgen: bool,
+
+    #[options(
+        help = "triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
+    )]
+    target: Target,
+
+    #[options(no_short, help = "print output in JSON format")]
+    json: bool,
+}
 
 #[derive(Debug, Options)]
 struct Args {
@@ -51,7 +80,7 @@ struct Args {
     bindgen: bool,
 
     #[options(
-        help = "Triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
+        help = "triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
     )]
     target: Vec<Target>,
 }
@@ -138,6 +167,13 @@ fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
 fn print_usage() {
     println!("cargo-ndk <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk [OPTIONS] <CARGO_ARGS>\n");
     println!("{}", Args::usage());
+}
+
+fn print_usage_env() {
+    println!(
+        "cargo-ndk-env <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk-env [OPTIONS]\n"
+    );
+    println!("{}", ArgsEnv::usage());
 }
 
 fn find_base_dir() -> PathBuf {
@@ -255,7 +291,87 @@ fn panic_hook(info: &PanicInfo<'_>) {
     }
 }
 
-pub(crate) fn run(args: Vec<String>) -> anyhow::Result<()> {
+pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
+    if args.contains(&"-h".into()) || args.contains(&"--help".into()) {
+        print_usage_env();
+        std::process::exit(0);
+    }
+
+    let color = args
+        .iter()
+        .position(|x| x == "--color")
+        .and_then(|p| args.get(p + 1))
+        .map(|x| &**x);
+
+    let verbosity = if args.contains(&"-q".into()) {
+        Verbosity::Quiet
+    } else if args.contains(&"-vv".into()) {
+        Verbosity::VeryVerbose
+    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
+        Verbosity::Verbose
+    } else {
+        Verbosity::Normal
+    };
+
+    let mut shell = Shell::new();
+    shell.set_verbosity(verbosity);
+    shell.set_color_choice(color)?;
+
+    let args = match ArgsEnv::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
+        Ok(args) if args.help => {
+            print_usage();
+            std::process::exit(0);
+        }
+        Ok(args) if args.version => {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            std::process::exit(0);
+        }
+        Ok(args) => args,
+        Err(e) => {
+            shell.error(e)?;
+            std::process::exit(2);
+        }
+    };
+
+    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
+        Some((path, method)) => (path, method),
+        None => {
+            shell.error("Could not find any NDK.")?;
+            shell.note(
+                "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
+            )?;
+            std::process::exit(1);
+        }
+    };
+
+    let clang_target = clang_target(
+        args.target.triple(),
+        args.platform.unwrap_or(Ndk::default().platform),
+    );
+
+    // Try command line, then config. Config falls back to defaults in any case.
+    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen);
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &env.into_iter()
+                    .map(|(k, v)| (k, v.to_str().unwrap().to_string()))
+                    .collect::<BTreeMap<_, _>>()
+            )
+            .unwrap()
+        );
+    } else {
+        for (k, v) in env {
+            println!("export {}={:?}", k, v);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     if args.is_empty() || args.contains(&"-h".into()) || args.contains(&"--help".into()) {
         print_usage();
         std::process::exit(0);

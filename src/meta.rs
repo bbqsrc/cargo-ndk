@@ -30,9 +30,9 @@ struct Metadata {
 }
 
 #[derive(Debug, Deserialize)]
-struct Ndk {
+pub(crate) struct Ndk {
     #[serde(default = "default_platform")]
-    platform: u8,
+    pub platform: u8,
 
     #[serde(default = "default_targets")]
     targets: Vec<Target>,
@@ -72,10 +72,11 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub enum Target {
     #[serde(rename = "armeabi-v7a")]
     ArmeabiV7a,
+    #[default]
     #[serde(rename = "arm64-v8a")]
     Arm64V8a,
     #[serde(rename = "x86")]

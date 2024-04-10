@@ -1,6 +1,6 @@
 [package]
 name = "cargo-ndk"
-version = "3.4.0"
+version = "3.5.0"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
 repository = "https://github.com/bbqsrc/cargo-ndk"
 documentation = "https://docs.rs/cargo-ndk"
@@ -17,6 +17,7 @@ categories = [
 ]
 edition = "2021"
 rust-version = "1.68"
+default-run = "cargo-ndk"
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -30,6 +31,7 @@ is-terminal = "0.4.9"
 libc = "0.2.147"
 pathos = "0.3.0"
 serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.115"
 termcolor = "1.2.0"
 toml = "0.8.8"
 version_check = "0.9.4"
