@@ -24,6 +24,8 @@ jobs:
           components: rustfmt, clippy
       - name: Run build
         run: cargo install --path .
+      - name: Smoke test `ndk-env`
+        run: cargo ndk-env
       - name: Run test
         working-directory: example
         run: cargo ndk -o jniLibs build -vv
