@@ -1,5 +1,12 @@
 ## Changelog
 
+### v3.5.0 - 2024-04-10
+
+- Enhancement: added `ndk-env` command for printing env vars for use with things like rust-analyzer.
+
+
+Please note the MSRV for _building_ `cargo-ndk` is now 1.73 due to dependency churn.
+
 ### v3.4.0 - 2023-09-23
 
 - Enhancement: add additional environment variables for sysroot directories (see README.md)

@@ -1,7 +1,7 @@
 # cargo-ndk - Build Rust code for Android
 
 [<img alt="CI" src="https://github.com/bbqsrc/cargo-ndk/actions/workflows/ci.yml/badge.svg">](https://github.com/bbqsrc/cargo-ndk/actions)
-<img alt="Minimum supported Rust version: 1.68" src="https://img.shields.io/badge/MSRV-1.68-informational">
+<img alt="Minimum supported Rust version: 1.73" src="https://img.shields.io/badge/MSRV-1.73-informational">
 
 This cargo extension handles all the environment configuration needed for successfully building libraries
 for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
