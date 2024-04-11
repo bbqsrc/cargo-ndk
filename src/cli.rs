@@ -333,7 +333,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
         }
     };
 
-    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
+    let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {
         Some((path, method)) => (path, method),
         None => {
             shell.error("Could not find any NDK.")?;
