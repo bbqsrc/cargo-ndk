@@ -1,5 +1,9 @@
 ## Changelog
 
+### v3.5.2 - 2024-04-11
+
+- Fix: make `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER` correct
+
 ### v3.5.1 - 2024-04-11
 
 - Fix: make the exports from `ndk-env` use underscores

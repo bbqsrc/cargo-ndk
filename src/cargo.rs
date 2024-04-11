@@ -75,7 +75,10 @@ pub(crate) fn build_env(
     bindgen: bool,
 ) -> BTreeMap<String, OsString> {
     let self_path = std::fs::canonicalize(env::args().next().unwrap())
-        .expect("Failed to canonicalize absolute path to cargo-ndk");
+        .expect("Failed to canonicalize absolute path to cargo-ndk")
+        .parent()
+        .unwrap()
+        .join("cargo-ndk");
 
     // Environment variables for the `cc` crate
     let (cc_key, _cc_value) = cc_env("CC", triple);
