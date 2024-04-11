@@ -1,5 +1,9 @@
 ## Changelog
 
+### v3.5.1 - 2024-04-11
+
+- Fix: make the exports from `ndk-env` use underscores
+
 ### v3.5.0 - 2024-04-10
 
 - Enhancement: added `ndk-env` command for printing env vars for use with things like rust-analyzer.

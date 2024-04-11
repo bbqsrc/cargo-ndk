@@ -364,7 +364,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
         );
     } else {
         for (k, v) in env {
-            println!("export {}={:?}", k, v);
+            println!("export {}={:?}", k.to_uppercase().replace('-', "_"), v);
         }
     }
 
