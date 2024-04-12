@@ -1,5 +1,10 @@
 ## Changelog
 
+### v3.5.3 - 2024-04-12
+
+- Enhancement: add usage instructions to the ndk-env output
+- Enhancement: add `--powershell` flag to ndk-env
+
 ### v3.5.2 - 2024-04-11
 
 - Fix: make `CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER` correct

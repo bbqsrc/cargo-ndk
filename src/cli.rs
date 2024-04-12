@@ -42,6 +42,9 @@ struct ArgsEnv {
     )]
     target: Target,
 
+    #[options(no_short, help = "use PowerShell syntax")]
+    powershell: bool,
+
     #[options(no_short, help = "print output in JSON format")]
     json: bool,
 }
@@ -362,10 +365,20 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
             )
             .unwrap()
         );
+    } else if args.powershell {
+        for (k, v) in env {
+            println!("${{env:{}}}={:?}", k, v);
+        }
+        println!();
+        println!("# To import with PowerShell:");
+        println!("#     cargo ndk-env --powershell | Out-String | Invoke-Expression");
     } else {
         for (k, v) in env {
             println!("export {}={:?}", k.to_uppercase().replace('-', "_"), v);
         }
+        println!();
+        println!("# To import with bash/zsh/etc:");
+        println!("#     source <(cargo ndk-env)");
     }
 
     Ok(())
