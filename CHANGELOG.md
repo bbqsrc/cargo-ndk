@@ -1,5 +1,10 @@
 ## Changelog
 
+### v3.5.4 - 2024-04-13
+
+- Fix: add compile error if attempted to build for unsupported target OSes (please stop trying to build cargo-ndk *for* Android. Makes no sense.)
+- Fix: remove underscore prefixed env vars from `ndk-env`
+
 ### v3.5.3 - 2024-04-12
 
 - Enhancement: add usage instructions to the ndk-env output

@@ -92,6 +92,27 @@ These environment variables are exported for use in build scripts and other down
 - `CARGO_NDK_SYSROOT_PATH`: path to the sysroot inside the Android NDK
 - `CARGO_NDK_SYSROOT_TARGET`: the target name for the files inside the sysroot (differs slightly from the standard LLVM triples)
 - `CARGO_NDK_SYSROOT_LIBS_PATH`: path to the libraries inside the sysroot with the given sysroot target (e.g. `$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`)
+
+### Printing the environment
+
+Sometimes you just want the environment variables that `cargo-ndk` configures so you can, say, set up rust-analyzer in VS Code or similar.
+
+If you want to source it into your bash environment:
+
+```
+source <(cargo ndk-env)
+```
+
+PowerShell:
+
+```
+cargo ndk-env --powershell | Out-String | Invoke-Expression
+```
+
+Rust Analyzer and anything else with JSON-based environment handling:
+
+For configuring rust-analyzer, add the `--json` flag and paste the blob into the relevant place in the config.
+
 ## Supported hosts
 
 - Linux

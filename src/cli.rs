@@ -187,6 +187,9 @@ fn find_base_dir() -> PathBuf {
     #[cfg(target_os = "macos")]
     let base_dir = pathos::user::home_dir().unwrap().join("Library");
 
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let base_dir = PathBuf::new();
+
     base_dir
 }
 
@@ -353,7 +356,10 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     );
 
     // Try command line, then config. Config falls back to defaults in any case.
-    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen);
+    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen)
+        .into_iter()
+        .filter(|(k, _)| !k.starts_with("_"))
+        .collect::<BTreeMap<_, _>>();
 
     if args.json {
         println!(
