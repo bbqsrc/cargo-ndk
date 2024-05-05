@@ -160,10 +160,7 @@ fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
         }
     }
 
-    // Check Android Studio installed directories
-    let base_dir = find_base_dir();
-
-    let ndk_dir = base_dir.join("Android").join("sdk").join("ndk");
+    let ndk_dir = default_ndk_dir();
     highest_version_ndk_in_path(&ndk_dir).map(|path| (path, "standard location".to_string()))
 }
 
@@ -179,18 +176,34 @@ fn print_usage_env() {
     println!("{}", ArgsEnv::usage());
 }
 
-fn find_base_dir() -> PathBuf {
+fn default_ndk_dir() -> PathBuf {
     #[cfg(windows)]
-    let base_dir = pathos::user::local_dir().unwrap().to_path_buf();
+    let dir = pathos::user::local_dir()
+        .unwrap()
+        .to_path_buf()
+        .join("Android")
+        .join("sdk")
+        .join("ndk");
+
     #[cfg(target_os = "linux")]
-    let base_dir = pathos::user::data_dir().unwrap().to_path_buf();
+    let dir = pathos::xdg::home_dir()
+        .unwrap()
+        .join("Android")
+        .join("Sdk")
+        .join("ndk");
+
     #[cfg(target_os = "macos")]
-    let base_dir = pathos::user::home_dir().unwrap().join("Library");
+    let dir = pathos::user::home_dir()
+        .unwrap()
+        .join("Library")
+        .join("Android")
+        .join("sdk")
+        .join("ndk");
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    let base_dir = PathBuf::new();
+    let dir = PathBuf::new();
 
-    base_dir
+    dir
 }
 
 fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
