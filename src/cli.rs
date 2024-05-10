@@ -535,7 +535,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         .or_else(|| {
             if let Some(selected_package) = cargo_args
                 .iter()
-                .position(|arg| arg == "-p")
+                .position(|arg| arg == "-p" || arg == "--package")
                 .and_then(|idx| cargo_args.get(idx + 1))
             {
                 let selected_package = metadata
@@ -676,12 +676,12 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
             let dir = out_dir.join(target.triple()).join(build_mode.to_string());
 
-            let so_files = match fs::read_dir(&dir) {
+            let lib_filename = format!("lib{}.so", config.lib_name);
+            let so_file = match fs::read_dir(&dir) {
                 Ok(dir) => dir
                     .filter_map(Result::ok)
                     .map(|x| x.path())
-                    .filter(|x| x.extension() == Some(OsStr::new("so")))
-                    .collect::<Vec<_>>(),
+                    .find(|x| x.file_name() == Some(OsStr::new(lib_filename.as_str()))),
                 Err(e) => {
                     shell.error(format!("Could not read directory: {:?}", dir))?;
                     shell.error(e)?;
@@ -689,36 +689,35 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 }
             };
 
-            if so_files.is_empty() {
-                shell.error(format!("No .so files found in path {:?}", dir))?;
+            if so_file.is_none() {
+                shell.error(format!("{:?} file not found in path {:?}", lib_filename, dir))?;
                 shell.error("Did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
                 shell.error("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.")?;
                 std::process::exit(1);
             }
+            let so_file = so_file.unwrap();
 
-            for so_file in so_files {
-                let dest = arch_output_dir.join(so_file.file_name().unwrap());
+            let dest = arch_output_dir.join(so_file.file_name().unwrap());
+            shell.verbose(|shell| {
+                shell.status(
+                    "Copying",
+                    format!(
+                        "{} -> {}",
+                        &dunce::canonicalize(&so_file).unwrap().display(),
+                        &dest.display()
+                    ),
+                )
+            })?;
+            fs::copy(so_file, &dest).unwrap();
+
+            if !args.no_strip {
                 shell.verbose(|shell| {
                     shell.status(
-                        "Copying",
-                        format!(
-                            "{} -> {}",
-                            &dunce::canonicalize(&so_file).unwrap().display(),
-                            &dest.display()
-                        ),
+                        "Stripping",
+                        format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
                     )
                 })?;
-                fs::copy(so_file, &dest).unwrap();
-
-                if !args.no_strip {
-                    shell.verbose(|shell| {
-                        shell.status(
-                            "Stripping",
-                            format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
-                        )
-                    })?;
-                    let _ = crate::cargo::strip(&ndk_home, &dest);
-                }
+                let _ = crate::cargo::strip(&ndk_home, &dest);
             }
         }
     }
