@@ -16,17 +16,24 @@ fn default_targets() -> Vec<Target> {
 
 #[derive(Debug, Deserialize)]
 struct CargoToml {
-    package: Option<Package>,
+    package: Package,
+    lib: Option<Lib>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Package {
+    name: String,
     metadata: Option<Metadata>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Metadata {
     ndk: Option<Ndk>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Lib {
+    name: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +66,7 @@ struct NdkTarget {
 
 #[derive(Debug)]
 pub struct Config {
+    pub lib_name: String,
     pub platform: u8,
     pub targets: Vec<Target>,
 }
@@ -68,6 +76,7 @@ impl Default for Config {
         Self {
             platform: Ndk::default().platform,
             targets: default_targets(),
+            lib_name: String::new(),
         }
     }
 }
@@ -134,10 +143,7 @@ pub(crate) fn config(
     let toml_string = std::fs::read_to_string(cargo_toml_path)?;
     let cargo_toml: CargoToml = toml::from_str(&toml_string)?;
 
-    let package = match cargo_toml.package {
-        Some(v) => v,
-        None => return Ok(crate::meta::Config::default()),
-    };
+    let package = cargo_toml.package;
 
     let ndk = package.metadata.and_then(|x| x.ndk).unwrap_or_default();
     let base_targets = ndk.targets;
@@ -149,6 +155,7 @@ pub(crate) fn config(
     };
 
     Ok(Config {
+        lib_name: cargo_toml.lib.and_then(|x| x.name).unwrap_or(package.name).replace("-", "_"),
         platform: ndk.platform,
         targets,
     })
