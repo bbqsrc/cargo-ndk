@@ -33,7 +33,7 @@ struct Metadata {
 
 #[derive(Debug, Deserialize)]
 struct Lib {
-    name: Option<String>
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,7 +155,11 @@ pub(crate) fn config(
     };
 
     Ok(Config {
-        lib_name: cargo_toml.lib.and_then(|x| x.name).unwrap_or(package.name).replace("-", "_"),
+        lib_name: cargo_toml
+            .lib
+            .and_then(|x| x.name)
+            .unwrap_or(package.name)
+            .replace('-', "_"),
         platform: ndk.platform,
         targets,
     })

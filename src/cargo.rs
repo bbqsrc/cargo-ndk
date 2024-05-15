@@ -42,11 +42,10 @@ pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
 }
 
 fn sysroot_target(rust_target: &str) -> &str {
-    let target = match rust_target {
+    (match rust_target {
         "armv7-linux-androideabi" => "arm-linux-androideabi",
         _ => rust_target,
-    };
-    target
+    }) as _
 }
 
 fn ndk_tool(arch: &str, tool: &str) -> PathBuf {

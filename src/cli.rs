@@ -371,7 +371,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     // Try command line, then config. Config falls back to defaults in any case.
     let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen)
         .into_iter()
-        .filter(|(k, _)| !k.starts_with("_"))
+        .filter(|(k, _)| !k.starts_with('_'))
         .collect::<BTreeMap<_, _>>();
 
     if args.json {
@@ -594,7 +594,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             )
         })?;
 
-        std::env::set_var("CARGO_NDK_OUTPUT_PATH", &output_dir);
+        std::env::set_var("CARGO_NDK_OUTPUT_PATH", output_dir);
     }
 
     shell.verbose(|shell| {
@@ -690,7 +690,10 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             };
 
             if so_file.is_none() {
-                shell.error(format!("{:?} file not found in path {:?}", lib_filename, dir))?;
+                shell.error(format!(
+                    "{:?} file not found in path {:?}",
+                    lib_filename, dir
+                ))?;
                 shell.error("Did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
                 shell.error("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.")?;
                 std::process::exit(1);
