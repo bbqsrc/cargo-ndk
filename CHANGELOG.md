@@ -1,5 +1,10 @@
 ## Changelog
 
+### v3.5.5 - 2024-05-15
+
+- Fix: use correct path on Linux
+- Fix: only copy libraries being built
+
 ### v3.5.4 - 2024-04-13
 
 - Fix: add compile error if attempted to build for unsupported target OSes (please stop trying to build cargo-ndk *for* Android. Makes no sense.)
