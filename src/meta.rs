@@ -16,7 +16,7 @@ fn default_targets() -> Vec<Target> {
 
 #[derive(Debug, Deserialize)]
 struct CargoToml {
-    package: Package,
+    package: Option<Package>,
     lib: Option<Lib>,
 }
 
@@ -36,7 +36,7 @@ struct Lib {
     name: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(crate) struct Ndk {
     #[serde(default = "default_platform")]
     pub platform: u8,
@@ -59,7 +59,7 @@ impl Default for Ndk {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct NdkTarget {
     targets: Vec<Target>,
 }
@@ -81,7 +81,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 pub enum Target {
     #[serde(rename = "armeabi-v7a")]
     ArmeabiV7a,
@@ -145,7 +145,12 @@ pub(crate) fn config(
 
     let package = cargo_toml.package;
 
-    let ndk = package.metadata.and_then(|x| x.ndk).unwrap_or_default();
+    let ndk = package
+        .as_ref()
+        .and_then(|x| x.metadata.as_ref())
+        .and_then(|x| x.ndk.as_ref())
+        .cloned()
+        .unwrap_or_default();
     let base_targets = ndk.targets;
 
     let targets = if matches!(build_mode, BuildMode::Release) {
@@ -154,12 +159,17 @@ pub(crate) fn config(
         ndk.debug.map_or_else(|| base_targets, |x| x.targets)
     };
 
+    let lib_name = cargo_toml
+        .lib
+        .and_then(|x| x.name.clone())
+        .or_else(|| package.as_ref().map(|x| x.name.to_string()));
+
+    let Some(lib_name) = lib_name else {
+        anyhow::bail!("Could not derive library name from Cargo.toml");
+    };
+
     Ok(Config {
-        lib_name: cargo_toml
-            .lib
-            .and_then(|x| x.name)
-            .unwrap_or(package.name)
-            .replace('-', "_"),
+        lib_name: lib_name.replace('-', "_"),
         platform: ndk.platform,
         targets,
     })

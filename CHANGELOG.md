@@ -1,5 +1,9 @@
 ## Changelog
 
+### v3.5.6 - 2024-05-20
+
+- Fix: a type was optional, then wasn't, and now is optional again.
+
 ### v3.5.5 - 2024-05-15
 
 - Fix: use correct path on Linux
