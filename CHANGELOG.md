@@ -1,5 +1,8 @@
 ## Changelog
 
+- Fix: canonicalize output directory path for `CARGO_NDK_OUTPUT_PATH`, fixes build scripts not at workspace root 
+- Enhancement: output directory creation error now prints error message instead of panicking
+
 ### v3.5.6 - 2024-05-20
 
 - Fix: a type was optional, then wasn't, and now is optional again.
