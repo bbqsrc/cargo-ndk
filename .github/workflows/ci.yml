@@ -23,7 +23,7 @@ jobs:
           targets: aarch64-linux-android, armv7-linux-androideabi
           components: rustfmt, clippy
       - name: Run build
-        run: cargo install --path .
+        run: cargo install --locked --path .
       - name: Smoke test `ndk-env`
         run: cargo ndk-env
       - name: Run test
