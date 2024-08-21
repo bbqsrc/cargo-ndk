@@ -26,6 +26,7 @@ maintenance = { status = "actively-developed" }
 anyhow = "1.0.75"
 cargo_metadata = "0.18.1"
 dunce = "1.0.4"
+filetime = "0.2.24"
 gumdrop = "0.8.1"
 is-terminal = "0.4.9"
 libc = "0.2.147"
