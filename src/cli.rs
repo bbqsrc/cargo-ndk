@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     env,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fmt::Display,
     fs,
     io::{self, ErrorKind},
@@ -10,7 +10,9 @@ use std::{
     time::Instant,
 };
 
-use cargo_metadata::{semver::Version, MetadataCommand};
+use anyhow::Context;
+use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, MetadataCommand};
+use filetime::FileTime;
 use gumdrop::Options;
 
 use crate::{
@@ -639,41 +641,48 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     let start_time = Instant::now();
 
-    for target in &targets {
-        let triple = target.triple();
-        shell.status("Building", format!("{} ({})", &target, &triple))?;
+    let targets = targets
+        .into_iter()
+        .map(|target| {
+            let triple = target.triple();
+            shell.status("Building", format!("{} ({})", &target, &triple))?;
 
-        shell.very_verbose(|shell| {
-            shell.status_with_color(
-                "Exporting",
-                format!("CARGO_NDK_ANDROID_TARGET={:?}", &target.to_string()),
-                termcolor::Color::Cyan,
-            )
-        })?;
+            shell.very_verbose(|shell| {
+                shell.status_with_color(
+                    "Exporting",
+                    format!("CARGO_NDK_ANDROID_TARGET={:?}", &target.to_string()),
+                    termcolor::Color::Cyan,
+                )
+            })?;
 
-        env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
+            env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
 
-        let status = crate::cargo::run(
-            &mut shell,
-            &working_dir,
-            &ndk_home,
-            &ndk_version,
-            triple,
-            platform,
-            &args.cargo_args,
-            &cargo_manifest,
-            args.bindgen,
-            &out_dir,
-        );
-        let code = status.code().unwrap_or(-1);
+            let (status, artifacts) = crate::cargo::run(
+                &mut shell,
+                &working_dir,
+                &ndk_home,
+                &ndk_version,
+                triple,
+                platform,
+                &args.cargo_args,
+                &cargo_manifest,
+                args.bindgen,
+                &out_dir,
+            )?;
+            let code = status.code().unwrap_or(-1);
 
-        if code != 0 {
-            shell.note("If the build failed due to a missing target, you can run this command:")?;
-            shell.note("")?;
-            shell.note(format!("    rustup target install {}", triple))?;
-            std::process::exit(code);
-        }
-    }
+            if code != 0 {
+                shell.note(
+                    "If the build failed due to a missing target, you can run this command:",
+                )?;
+                shell.note("")?;
+                shell.note(format!("    rustup target install {}", triple))?;
+                std::process::exit(code);
+            }
+
+            Ok((target, artifacts))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     if let Some(output_dir) = args.output_dir.as_ref() {
         shell.concise(|shell| {
@@ -686,57 +695,66 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             )
         })?;
 
-        for target in targets.iter() {
+        for (target, artifacts) in targets.iter() {
+            shell.very_verbose(|shell| {
+                shell.note(format!("artifacts for {target}: {artifacts:?}"))
+            })?;
+
             let arch_output_dir = output_dir.join(target.to_string());
             fs::create_dir_all(&arch_output_dir).unwrap();
 
-            let dir = out_dir.join(target.triple()).join(build_mode.to_string());
-
-            let lib_filename = format!("lib{}.so", config.lib_name);
-            let so_file = match fs::read_dir(&dir) {
-                Ok(dir) => dir
-                    .filter_map(Result::ok)
-                    .map(|x| x.path())
-                    .find(|x| x.file_name() == Some(OsStr::new(lib_filename.as_str()))),
-                Err(e) => {
-                    shell.error(format!("Could not read directory: {:?}", dir))?;
-                    shell.error(e)?;
-                    std::process::exit(1);
-                }
-            };
-
-            if so_file.is_none() {
-                shell.error(format!(
-                    "{:?} file not found in path {:?}",
-                    lib_filename, dir
-                ))?;
+            if artifacts.is_empty() || !artifacts.iter().any(artifact_is_cdylib) {
+                shell.error("No usable artifacts produced by cargo")?;
                 shell.error("Did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
                 shell.error("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.")?;
                 std::process::exit(1);
             }
-            let so_file = so_file.unwrap();
 
-            let dest = arch_output_dir.join(so_file.file_name().unwrap());
-            shell.verbose(|shell| {
-                shell.status(
-                    "Copying",
-                    format!(
-                        "{} -> {}",
-                        &dunce::canonicalize(&so_file).unwrap().display(),
-                        &dest.display()
+            for artifact in artifacts.iter().filter(|a| artifact_is_cdylib(a)) {
+                let Some(file) = artifact
+                    .filenames
+                    .iter()
+                    .find(|name| name.extension() == Some("so"))
+                else {
+                    // This should never happen because we filter for cdylib outputs above but you
+                    // never know... and it still feels better than just unwrapping
+                    shell.error("No cdylib file found to copy")?;
+                    std::process::exit(1);
+                };
+
+                let dest = arch_output_dir.join(file.file_name().unwrap());
+
+                if is_fresh(file, &dest)? {
+                    shell.status("Fresh", file)?;
+                    continue;
+                }
+
+                shell.verbose(|shell| {
+                    shell.status("Copying", format!("{file} -> {}", &dest.display()))
+                })?;
+
+                fs::copy(file, &dest)
+                    .with_context(|| format!("failed to copy {file:?} over to {dest:?}"))?;
+
+                filetime::set_file_mtime(
+                    &dest,
+                    FileTime::from_last_modification_time(
+                        &dest
+                            .metadata()
+                            .with_context(|| format!("failed getting metadata for {dest:?}"))?,
                     ),
                 )
-            })?;
-            fs::copy(so_file, &dest).unwrap();
+                .with_context(|| format!("unable to update the modification time of {dest:?}"))?;
 
-            if !args.no_strip {
-                shell.verbose(|shell| {
-                    shell.status(
-                        "Stripping",
-                        format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
-                    )
-                })?;
-                let _ = crate::cargo::strip(&ndk_home, &dest);
+                if !args.no_strip {
+                    shell.verbose(|shell| {
+                        shell.status(
+                            "Stripping",
+                            format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
+                        )
+                    })?;
+                    let _ = crate::cargo::strip(&ndk_home, &dest);
+                }
             }
         }
     }
@@ -751,7 +769,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         };
         let t = targets
             .iter()
-            .map(ToString::to_string)
+            .map(|(target, _)| target.to_string())
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -759,4 +777,31 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
 
     Ok(())
+}
+
+/// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
+fn artifact_is_cdylib(artifact: &Artifact) -> bool {
+    artifact.target.crate_types.iter().any(|ty| ty == "cdylib")
+}
+
+// Check if the source file has changed and should be copied over to the destination path.
+fn is_fresh(src: &Utf8Path, dest: &Path) -> anyhow::Result<bool> {
+    if !dest.exists() {
+        return Ok(false);
+    }
+
+    let src = src
+        .metadata()
+        .with_context(|| format!("failed getting metadata for {src:?}"))?;
+    let dest = dest
+        .metadata()
+        .with_context(|| format!("failed getting metadata for {dest:?}"))?;
+
+    // Only errors if modification time isn't available on the OS. Therefore,
+    // we can't check it and always assume the file changed.
+    let Some((src, dest)) = src.modified().ok().zip(dest.modified().ok()) else {
+        return Ok(false);
+    };
+
+    Ok(src <= dest)
 }

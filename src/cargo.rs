@@ -2,11 +2,13 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::OsString,
+    io::BufReader,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
-use cargo_metadata::{camino::Utf8PathBuf, semver::Version};
+use anyhow::{Context, Result};
+use cargo_metadata::{camino::Utf8PathBuf, semver::Version, Artifact, Message};
 
 use crate::shell::Shell;
 
@@ -203,7 +205,7 @@ pub(crate) fn run(
     cargo_manifest: &Path,
     bindgen: bool,
     #[allow(unused_variables)] out_dir: &Utf8PathBuf,
-) -> std::process::ExitStatus {
+) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
     if version.major < 23 {
         shell.error("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.").unwrap();
         std::process::exit(1);
@@ -259,7 +261,32 @@ pub(crate) fn run(
     cargo_args.insert(arg_insertion_position, triple.into());
     cargo_args.insert(arg_insertion_position, "--target".into());
 
-    cargo_cmd.args(cargo_args).status().expect("cargo crashed")
+    cargo_args.insert(arg_insertion_position, "json-render-diagnostics".into());
+    cargo_args.insert(arg_insertion_position, "--message-format".into());
+
+    let mut child = cargo_cmd
+        .args(cargo_args)
+        .stdin(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("failed spawning cargo process")?;
+
+    let reader = BufReader::new(child.stdout.take().context("no stdout available")?);
+    let mut artifacts = Vec::new();
+
+    for msg in Message::parse_stream(reader) {
+        match msg? {
+            Message::CompilerArtifact(artifact) => artifacts.push(artifact),
+            Message::CompilerMessage(msg) => println!("{msg}"),
+            Message::TextLine(line) => println!("{line}"),
+            _ => {}
+        }
+    }
+
+    let status = child.wait().context("cargo crashed")?;
+
+    Ok((status, artifacts))
 }
 
 pub(crate) fn strip(ndk_home: &Path, bin_path: &Path) -> std::process::ExitStatus {

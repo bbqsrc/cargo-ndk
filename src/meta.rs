@@ -17,23 +17,16 @@ fn default_targets() -> Vec<Target> {
 #[derive(Debug, Deserialize)]
 struct CargoToml {
     package: Option<Package>,
-    lib: Option<Lib>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Package {
-    name: String,
     metadata: Option<Metadata>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Metadata {
     ndk: Option<Ndk>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Lib {
-    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -66,7 +59,6 @@ struct NdkTarget {
 
 #[derive(Debug)]
 pub struct Config {
-    pub lib_name: String,
     pub platform: u8,
     pub targets: Vec<Target>,
 }
@@ -76,7 +68,6 @@ impl Default for Config {
         Self {
             platform: Ndk::default().platform,
             targets: default_targets(),
-            lib_name: String::new(),
         }
     }
 }
@@ -159,17 +150,7 @@ pub(crate) fn config(
         ndk.debug.map_or_else(|| base_targets, |x| x.targets)
     };
 
-    let lib_name = cargo_toml
-        .lib
-        .and_then(|x| x.name.clone())
-        .or_else(|| package.as_ref().map(|x| x.name.to_string()));
-
-    let Some(lib_name) = lib_name else {
-        anyhow::bail!("Could not derive library name from Cargo.toml");
-    };
-
     Ok(Config {
-        lib_name: lib_name.replace('-', "_"),
         platform: ndk.platform,
         targets,
     })
