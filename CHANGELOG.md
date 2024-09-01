@@ -1,5 +1,7 @@
 ## Changelog
 
+- Fix: create output dir before canonicalize
+
 ### v3.5.7 - 2024-08-19
 
 - Fix: canonicalize output directory path for `CARGO_NDK_OUTPUT_PATH`, fixes build scripts not at workspace root 

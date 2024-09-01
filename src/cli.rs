@@ -586,6 +586,11 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     let platform = args.platform.unwrap_or(config.platform);
 
     if let Some(output_dir) = args.output_dir.as_ref() {
+        if let Err(e) = fs::create_dir_all(&output_dir) {
+            shell.error(format!("failed to create output dir, {e}"))?;
+            std::process::exit(1);
+        }
+
         // Canonicalize because path is shared with build scripts that can run in a different current_dir.
         let output_dir = match dunce::canonicalize(output_dir) {
             Ok(p) => p,
@@ -598,11 +603,6 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 }
             }
         };
-
-        if let Err(e) = fs::create_dir_all(&output_dir) {
-            shell.error(format!("failed to create output dir, {e}"))?;
-            std::process::exit(1);
-        }
 
         shell.verbose(|shell| {
             shell.status_with_color(
