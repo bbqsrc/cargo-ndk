@@ -31,7 +31,7 @@ jobs:
         run: cargo ndk -o jniLibs build -vv
       - name: Run openssl example
         working-directory: example/openssl
-        run: cargo ndk -o jniLibs build -vv
+        run: cargo ndk --platform 28 build -vv
       - name: Check code formatting
         continue-on-error: true
         run: cargo fmt --all -- --check
