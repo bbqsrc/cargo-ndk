@@ -165,6 +165,12 @@ pub(crate) fn build_env(
     .into_iter()
     .collect::<BTreeMap<String, OsString>>();
 
+    if env::var("MSYSTEM").is_ok() || env::var("CYGWIN").is_ok() {
+        envs = envs.into_iter().map(|(k, v)| {
+            (k, OsString::from(v.into_string().unwrap().replace("\\", "/")))
+        }).collect();
+    }
+
     if bindgen {
         let bindgen_args = format!(
             "--sysroot={} -I{}",
