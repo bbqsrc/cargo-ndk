@@ -1,0 +1,8 @@
+[package]
+name = "openssl-android"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+openssl = { version = "0.10.68", features = ["vendored"] }
+reqwest = "0.12.8"
