@@ -586,7 +586,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     let platform = args.platform.unwrap_or(config.platform);
 
     if let Some(output_dir) = args.output_dir.as_ref() {
-        if let Err(e) = fs::create_dir_all(&output_dir) {
+        if let Err(e) = fs::create_dir_all(output_dir) {
             shell.error(format!("failed to create output dir, {e}"))?;
             std::process::exit(1);
         }

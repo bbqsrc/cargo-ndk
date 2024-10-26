@@ -166,9 +166,15 @@ pub(crate) fn build_env(
     .collect::<BTreeMap<String, OsString>>();
 
     if env::var("MSYSTEM").is_ok() || env::var("CYGWIN").is_ok() {
-        envs = envs.into_iter().map(|(k, v)| {
-            (k, OsString::from(v.into_string().unwrap().replace("\\", "/")))
-        }).collect();
+        envs = envs
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    OsString::from(v.into_string().unwrap().replace('\\', "/")),
+                )
+            })
+            .collect();
     }
 
     if bindgen {
