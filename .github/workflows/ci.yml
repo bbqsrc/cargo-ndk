@@ -34,16 +34,16 @@ jobs:
         run: cargo ndk-env
       - name: Run basic example
         working-directory: example/basic
-        run: cargo ndk -t armeabi-v7a -o jniLibs build -vv
+        run: cargo ndk -t armeabi-v7a -o jniLibs build
       - name: Run openssl example (Windows)
         if: runner.os == 'Windows'
         shell: 'msys2 {0}'
         working-directory: example/openssl
-        run: cargo ndk -t arm64-v8a --platform 28 build -vv
+        run: cargo ndk -t arm64-v8a --platform 28 build
       - name: Run openssl example (Unix)
         if: runner.os != 'Windows'
         working-directory: example/openssl
-        run: cargo ndk -t arm64-v8a --platform 28 build -vv
+        run: cargo ndk -t arm64-v8a --platform 28 build
       - name: Check code formatting
         continue-on-error: true
         run: cargo fmt --all -- --check
