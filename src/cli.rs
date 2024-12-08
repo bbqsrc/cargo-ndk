@@ -1,3 +1,4 @@
+#[allow(deprecated)]
 use std::{
     collections::BTreeMap,
     env,
@@ -266,6 +267,7 @@ fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
 
+#[allow(deprecated)]
 fn panic_hook(info: &PanicInfo<'_>) {
     fn _attempt_shell(lines: &[String]) -> Result<(), anyhow::Error> {
         let mut shell = Shell::new();
@@ -576,14 +578,14 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
     env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
 
+    let platform = args.platform.unwrap_or(config.platform);
+
     // Try command line, then config. Config falls back to defaults in any case.
     let targets = if !args.target.is_empty() {
         args.target
     } else {
         config.targets
     };
-
-    let platform = args.platform.unwrap_or(config.platform);
 
     if let Some(output_dir) = args.output_dir.as_ref() {
         if let Err(e) = fs::create_dir_all(output_dir) {
@@ -650,12 +652,32 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             shell.very_verbose(|shell| {
                 shell.status_with_color(
                     "Exporting",
-                    format!("CARGO_NDK_ANDROID_TARGET={:?}", &target.to_string()),
+                    format!("CARGO_NDK_ANDROID_PLATFORM={:?}", &target.to_string()),
                     termcolor::Color::Cyan,
                 )
             })?;
+            env::set_var("CARGO_NDK_ANDROID_PLATFORM", target.to_string());
 
-            env::set_var("CARGO_NDK_ANDROID_TARGET", target.to_string());
+            // Set ANDROID_PLATFORM (API level)
+            shell.very_verbose(|shell| {
+                shell.status_with_color(
+                    "Exporting",
+                    format!("ANDROID_PLATFORM={}", platform.to_string()),
+                    termcolor::Color::Cyan,
+                )
+            })?;
+            env::set_var("ANDROID_PLATFORM", platform.to_string());
+
+            // Set ANDROID_ABI using the Android-specific target name
+            let android_abi = target.to_string();
+            shell.very_verbose(|shell| {
+                shell.status_with_color(
+                    "Exporting",
+                    format!("ANDROID_ABI={:?}", &android_abi),
+                    termcolor::Color::Cyan,
+                )
+            })?;
+            env::set_var("ANDROID_ABI", android_abi);
 
             let (status, artifacts) = crate::cargo::run(
                 &mut shell,
