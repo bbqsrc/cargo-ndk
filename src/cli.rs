@@ -5,10 +5,14 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
-    panic::{self, PanicHookInfo},
     path::{Path, PathBuf},
     time::Instant,
+    panic,
 };
+
+// Can be removed when MSRV is bumped to 1.81+.
+#[allow(deprecated)]
+pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 
 use anyhow::Context;
 use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, MetadataCommand};
