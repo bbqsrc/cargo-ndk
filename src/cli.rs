@@ -1,4 +1,3 @@
-#[allow(deprecated)]
 use std::{
     collections::BTreeMap,
     env,
@@ -6,7 +5,7 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
-    panic::{self, PanicInfo},
+    panic::{self, PanicHookInfo},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -267,8 +266,7 @@ fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
 
-#[allow(deprecated)]
-fn panic_hook(info: &PanicInfo<'_>) {
+fn panic_hook(info: &PanicHookInfo<'_>) {
     fn _attempt_shell(lines: &[String]) -> Result<(), anyhow::Error> {
         let mut shell = Shell::new();
         shell.error("cargo-ndk panicked! Generating report...")?;
@@ -662,7 +660,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             shell.very_verbose(|shell| {
                 shell.status_with_color(
                     "Exporting",
-                    format!("ANDROID_PLATFORM={}", platform.to_string()),
+                    format!("ANDROID_PLATFORM={}", platform),
                     termcolor::Color::Cyan,
                 )
             })?;
