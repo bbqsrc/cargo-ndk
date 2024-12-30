@@ -108,7 +108,7 @@ pub(crate) fn build_env(
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
-
+    
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
     let target_cflags = match cflags_value {
         Some(v) => format!("{clang_target} {v}"),
@@ -159,6 +159,13 @@ pub(crate) fn build_env(
             cargo_ndk_sysroot_target_key.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
+        // Found this through a comment related to bindgen using the wrong clang for cross compiles
+        //
+        // https://github.com/rust-lang/rust-bindgen/issues/2962#issuecomment-2438297124
+        //
+        // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
+        ("CLANG_PATH".into(), target_cc.with_extension("exe").into()),
+
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
         ("_CARGO_NDK_LINK_CLANG".into(), target_cc.into()),
     ]
