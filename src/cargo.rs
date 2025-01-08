@@ -49,6 +49,15 @@ fn sysroot_target(rust_target: &str) -> &str {
         _ => rust_target,
     }) as _
 }
+fn rt_builtins(rust_target: &str) -> &str {
+    (match rust_target {
+        "armv7-linux-androideabi" => "arm",
+        "aarch64-linux-android" => "aarch64",
+        "i686-linux-android" => "i686",
+        "x86_64-linux-android" => "x86_64",
+        _ => rust_target,
+    }) as _
+}
 
 fn ndk_tool(arch: &str, tool: &str) -> PathBuf {
     ["toolchains", "llvm", "prebuilt", arch, "bin", tool]
@@ -107,6 +116,7 @@ pub(crate) fn build_env(
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
+    let cargo_rust_flags_key = cargo_env_target_cfg(triple, "rustflags");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
     
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
@@ -131,6 +141,12 @@ pub(crate) fn build_env(
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
+
+    const DEFAULT_CLANG_VERSION: &str = "18";
+    let clang_version =
+        env::var("NDK_CLANG_VERSION").unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+
+    let clang_rt = format!("-L{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux -lstatic=clang_rt.builtins-{}-android", ndk_home.display(), rt_builtins(triple));
 
     let extra_include = format!(
         "{}/usr/include/{}",
@@ -159,6 +175,7 @@ pub(crate) fn build_env(
             cargo_ndk_sysroot_target_key.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
+        (cargo_rust_flags_key, clang_rt.into()),
         // Found this through a comment related to bindgen using the wrong clang for cross compiles
         //
         // https://github.com/rust-lang/rust-bindgen/issues/2962#issuecomment-2438297124
