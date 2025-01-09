@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::OsString,
+    fs,
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -118,7 +119,7 @@ pub(crate) fn build_env(
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
     let cargo_rust_flags_key = cargo_env_target_cfg(triple, "rustflags");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
-    
+
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
     let target_cflags = match cflags_value {
         Some(v) => format!("{clang_target} {v}"),
@@ -142,11 +143,24 @@ pub(crate) fn build_env(
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
 
-    const DEFAULT_CLANG_VERSION: &str = "18";
-    let clang_version =
-        env::var("NDK_CLANG_VERSION").unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
-
-    let clang_rt = format!("-L{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux -lstatic=clang_rt.builtins-{}-android", ndk_home.display(), rt_builtins(triple));
+    let clang_folder: PathBuf = format!(
+        "{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang",
+        ndk_home.display()
+    )
+    .into();
+    // choose the clang target with the highest version
+    // Should we filter for only numbers?
+    let clang_target = fs::read_dir(clang_folder)
+        .expect("Unable to get clang target directory")
+        .filter_map(|a| a.ok())
+        .max_by(|a, b| a.file_name().cmp(&b.file_name()))
+        .expect("Unable to get clang target")
+        .path();
+    let clang_rt = format!(
+        "-L{}/lib/linux -lstatic=clang_rt.builtins-{}-android",
+        clang_target.display(),
+        rt_builtins(triple)
+    );
 
     let extra_include = format!(
         "{}/usr/include/{}",
@@ -182,7 +196,6 @@ pub(crate) fn build_env(
         //
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
         ("CLANG_PATH".into(), target_cc.with_extension("exe").into()),
-
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
         ("_CARGO_NDK_LINK_CLANG".into(), target_cc.into()),
     ]
