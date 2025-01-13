@@ -151,11 +151,10 @@ pub(crate) fn build_env(
         .join(ARCH)
         .join("lib")
         .join("clang");
-    // let clang_rt = format!("-L{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux -lstatic=clang_rt.builtins-{}-android", ndk_home.display(), rt_builtins(triple));
 
     // choose the clang target with the highest version
     // Should we filter for only numbers?
-    let clang_target = fs::read_dir(clang_folder)
+    let clang_builtins_target = fs::read_dir(clang_folder)
         .expect("Unable to get clang target directory")
         .filter_map(|a| a.ok())
         .max_by(|a, b| a.file_name().cmp(&b.file_name()))
@@ -163,7 +162,7 @@ pub(crate) fn build_env(
         .path();
     let clang_rt = format!(
         "-L{} -lstatic=clang_rt.builtins-{}-android",
-        clang_target.join("lib").join("linux").display(),
+        clang_builtins_target.join("lib").join("linux").display(),
         rt_builtins(triple)
     );
 
