@@ -143,11 +143,16 @@ pub(crate) fn build_env(
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
 
-    let clang_folder: PathBuf = format!(
-        "{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang",
-        ndk_home.display()
-    )
-    .into();
+    //{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}
+    let clang_folder: PathBuf = ndk_home
+        .join("toolchains")
+        .join("llvm")
+        .join("prebuilt")
+        .join(ARCH)
+        .join("lib")
+        .join("clang");
+    // let clang_rt = format!("-L{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux -lstatic=clang_rt.builtins-{}-android", ndk_home.display(), rt_builtins(triple));
+
     // choose the clang target with the highest version
     // Should we filter for only numbers?
     let clang_target = fs::read_dir(clang_folder)
@@ -157,8 +162,8 @@ pub(crate) fn build_env(
         .expect("Unable to get clang target")
         .path();
     let clang_rt = format!(
-        "-L{}/lib/linux -lstatic=clang_rt.builtins-{}-android",
-        clang_target.display(),
+        "-L{} -lstatic=clang_rt.builtins-{}-android",
+        clang_target.join("lib").join("linux").display(),
         rt_builtins(triple)
     );
 
