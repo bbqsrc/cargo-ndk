@@ -5,9 +5,9 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
+    panic,
     path::{Path, PathBuf},
     time::Instant,
-    panic,
 };
 
 // Can be removed when MSRV is bumped to 1.81+.
@@ -727,22 +727,23 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             let arch_output_dir = output_dir.join(target.to_string());
             fs::create_dir_all(&arch_output_dir).unwrap();
 
-            if artifacts.is_empty() || !artifacts.iter().any(artifact_is_cdylib) {
+            if artifacts.is_empty() || !artifacts.iter().any(artifact_is_usable) {
                 shell.error("No usable artifacts produced by cargo")?;
-                shell.error("Did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
+                shell.error("If creating a shared library, did you set the crate-type in Cargo.toml to include 'cdylib'?")?;
                 shell.error("For more info, see <https://doc.rust-lang.org/cargo/reference/cargo-targets.html#library>.")?;
                 std::process::exit(1);
             }
 
-            for artifact in artifacts.iter().filter(|a| artifact_is_cdylib(a)) {
+            for artifact in artifacts.iter().filter(|a| artifact_is_usable(a)) {
                 let Some(file) = artifact
                     .filenames
                     .iter()
                     .find(|name| name.extension() == Some("so"))
+                    .or(artifact.executable.as_ref())
                 else {
-                    // This should never happen because we filter for cdylib outputs above but you
-                    // never know... and it still feels better than just unwrapping
-                    shell.error("No cdylib file found to copy")?;
+                    // This should never happen because we filter for cdylib and executable outputs above
+                    // but you never know... and it still feels better than just unwrapping
+                    shell.error("No cdylib or executable file found to copy")?;
                     std::process::exit(1);
                 };
 
@@ -806,6 +807,14 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
 fn artifact_is_cdylib(artifact: &Artifact) -> bool {
     artifact.target.crate_types.iter().any(|ty| ty == "cdylib")
+}
+
+fn artifact_is_exec(artifact: &Artifact) -> bool {
+    artifact.executable.is_some()
+}
+
+fn artifact_is_usable(artifact: &Artifact) -> bool {
+    artifact_is_cdylib(artifact) || artifact_is_exec(artifact)
 }
 
 // Check if the source file has changed and should be copied over to the destination path.
