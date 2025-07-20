@@ -48,7 +48,7 @@ struct ArgsEnv {
         help = "Enable linking clang_rt. Solves various issues related to compiling Rust and C++ using cc. Note however this will override RUSTFLAGS",
         default = "false"
     )]
-    link_builtin: bool,
+    link_builtins: bool,
 
     #[options(
         help = "triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
@@ -100,7 +100,7 @@ struct Args {
         help = "Enable linking clang_rt. Solves various issues related to compiling Rust and C++ using cc. Note however this will override RUSTFLAGS",
         default = "false"
     )]
-    link_builtin: bool,
+    link_builtins: bool,
 
     #[options(
         help = "triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
@@ -389,7 +389,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     );
 
     // Try command line, then config. Config falls back to defaults in any case.
-    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen, args.link_builtin)
+    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen, args.link_builtins)
         .into_iter()
         .filter(|(k, _)| !k.starts_with('_'))
         .collect::<BTreeMap<_, _>>();
@@ -705,7 +705,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 &args.cargo_args,
                 &cargo_manifest,
                 args.bindgen,
-                args.link_builtin,
+                args.link_builtins,
                 &out_dir,
             )?;
             let code = status.code().unwrap_or(-1);
