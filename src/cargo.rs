@@ -199,7 +199,11 @@ pub(crate) fn build_env(
         // https://github.com/rust-lang/rust-bindgen/issues/2962#issuecomment-2438297124
         //
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
+        #[cfg(target_os = "windows")]
         ("CLANG_PATH".into(), target_cc.with_extension("exe").into()),
+        #[cfg(not(target_os = "windows"))]
+        ("CLANG_PATH".into(), target_cc.into()),
+
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
         ("_CARGO_NDK_LINK_CLANG".into(), target_cc.into()),
     ]
