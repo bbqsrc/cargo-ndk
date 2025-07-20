@@ -202,7 +202,7 @@ pub(crate) fn build_env(
         #[cfg(target_os = "windows")]
         ("CLANG_PATH".into(), target_cc.with_extension("exe").into()),
         #[cfg(not(target_os = "windows"))]
-        ("CLANG_PATH".into(), target_cc.into()),
+        ("CLANG_PATH".into(), target_cc.clone().into()),
 
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
         ("_CARGO_NDK_LINK_CLANG".into(), target_cc.into()),
