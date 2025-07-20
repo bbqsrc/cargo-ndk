@@ -99,6 +99,7 @@ pub(crate) fn build_env(
     ndk_home: &Path,
     clang_target: &str,
     bindgen: bool,
+    link_builtin: bool
 ) -> BTreeMap<String, OsString> {
     let self_path = std::fs::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
@@ -117,7 +118,6 @@ pub(crate) fn build_env(
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
-    let cargo_rust_flags_key = cargo_env_target_cfg(triple, "rustflags");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
 
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
@@ -152,20 +152,6 @@ pub(crate) fn build_env(
         .join("lib")
         .join("clang");
 
-    // choose the clang target with the highest version
-    // Should we filter for only numbers?
-    let clang_builtins_target = fs::read_dir(clang_folder)
-        .expect("Unable to get clang target directory")
-        .filter_map(|a| a.ok())
-        .max_by(|a, b| a.file_name().cmp(&b.file_name()))
-        .expect("Unable to get clang target")
-        .path();
-    let clang_rt = format!(
-        "-L{} -lstatic=clang_rt.builtins-{}-android",
-        clang_builtins_target.join("lib").join("linux").display(),
-        rt_builtins(triple)
-    );
-
     let extra_include = format!(
         "{}/usr/include/{}",
         &cargo_ndk_sysroot_path.display(),
@@ -193,7 +179,6 @@ pub(crate) fn build_env(
             cargo_ndk_sysroot_target_key.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
-        (cargo_rust_flags_key, clang_rt.into()),
         // Found this through a comment related to bindgen using the wrong clang for cross compiles
         //
         // https://github.com/rust-lang/rust-bindgen/issues/2962#issuecomment-2438297124
@@ -216,6 +201,32 @@ pub(crate) fn build_env(
                 )
             })
             .collect();
+    }
+
+    if link_builtin {
+        // TODO: Can we do this without RUSTFLAGS?
+        let cargo_rust_flags_key = cargo_env_target_cfg(triple, "rustflags");
+
+        // choose the clang target with the highest version
+        // Should we filter for only numbers?
+        let clang_builtins_target = fs::read_dir(clang_folder)
+            .expect("Unable to get clang target directory")
+            .filter_map(|a| a.ok())
+            .max_by(|a, b| a.file_name().cmp(&b.file_name()))
+            .expect("Unable to get clang target")
+            .path();
+
+
+        let clang_rt = format!(
+            "-L{} -lstatic=clang_rt.builtins-{}-android",
+            clang_builtins_target.join("lib").join("linux").display(),
+            rt_builtins(triple)
+        );
+
+        envs.insert(
+            cargo_rust_flags_key,
+            clang_rt.into(),
+        );
     }
 
     if bindgen {
@@ -257,6 +268,7 @@ pub(crate) fn run(
     cargo_args: &[String],
     cargo_manifest: &Path,
     bindgen: bool,
+    link_builtin: bool,
     #[allow(unused_variables)] out_dir: &Utf8PathBuf,
 ) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
     if version.major < 23 {
@@ -276,7 +288,7 @@ pub(crate) fn run(
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(triple, ndk_home, &clang_target, bindgen);
+    let envs = build_env(triple, ndk_home, &clang_target, bindgen, link_builtin);
 
     shell
         .very_verbose(|shell| {
