@@ -16,8 +16,8 @@ pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 
 use anyhow::Context;
 use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, CrateType, MetadataCommand};
-use filetime::FileTime;
 use clap::Parser;
+use filetime::FileTime;
 
 use crate::{
     cargo::{build_env, clang_target},
@@ -155,7 +155,6 @@ fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
     let ndk_dir = default_ndk_dir();
     highest_version_ndk_in_path(&ndk_dir).map(|path| (path, "standard location".to_string()))
 }
-
 
 fn default_ndk_dir() -> PathBuf {
     #[cfg(windows)]
@@ -302,7 +301,6 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
-    
 
     let color = args
         .iter()
@@ -383,6 +381,78 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Parse arguments that can appear both before and after the cargo subcommand
+fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
+    use clap::CommandFactory;
+
+    let mut global_args = vec!["cargo-ndk".to_string()];
+    let mut cargo_args = Vec::new();
+
+    // Skip the "ndk" subcommand name (always the first argument)
+    let mut i = 1;
+
+    // Get all flags from the Args struct programmatically
+    let cmd = Args::command();
+    let mut global_flags = Vec::new();
+    let mut value_flags = Vec::new();
+
+    for arg in cmd.get_arguments() {
+        // Skip the cargo_args field since it's not a real flag
+        if arg.get_id() == "cargo_args" {
+            continue;
+        }
+
+        if let Some(long) = arg.get_long() {
+            let long_flag = format!("--{}", long);
+            global_flags.push(long_flag.clone());
+
+            // Check if this flag takes a value (not a boolean flag)
+            if arg.get_action().takes_values() {
+                value_flags.push(long_flag);
+            }
+        }
+        if let Some(short) = arg.get_short() {
+            let short_flag = format!("-{}", short);
+            global_flags.push(short_flag.clone());
+
+            // Check if this flag takes a value (not a boolean flag)
+            if arg.get_action().takes_values() {
+                value_flags.push(short_flag);
+            }
+        }
+    }
+
+    while i < args.len() {
+        let arg = &args[i];
+
+        // Check if this is a global flag
+        if global_flags.contains(&arg.to_string()) {
+            global_args.push(arg.clone());
+
+            // Check if this flag takes a value
+            if value_flags.contains(&arg.to_string()) {
+                if i + 1 < args.len() {
+                    i += 1;
+                    global_args.push(args[i].clone());
+                }
+            }
+        } else {
+            // This is a cargo arg
+            cargo_args.push(arg.clone());
+        }
+
+        i += 1;
+    }
+
+    // Parse the extracted global args
+    let mut parsed_args = Args::try_parse_from(&global_args)?;
+
+    // Set the cleaned cargo_args directly
+    parsed_args.cargo_args = cargo_args;
+
+    Ok(parsed_args)
+}
+
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
     if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
@@ -445,7 +515,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             .unwrap_or(BuildMode::Debug)
     };
 
-    let args = match Args::try_parse_from(&args) {
+    let args = match parse_mixed_args(args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;
