@@ -75,7 +75,7 @@ fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
             .filter_map(|x| {
                 let path = x.path();
                 path.components()
-                    .last()
+                    .next_back()
                     .and_then(|comp| comp.as_os_str().to_str())
                     .and_then(|name| Version::parse(name).ok())
                     .map(|version| (version, path))
@@ -414,11 +414,9 @@ fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
             global_args.push(arg.clone());
 
             // Check if this flag takes a value
-            if value_flags.contains(&arg.to_string()) {
-                if i + 1 < args.len() {
-                    i += 1;
-                    global_args.push(args[i].clone());
-                }
+            if value_flags.contains(&arg.to_string()) && i + 1 < args.len() {
+                i += 1;
+                global_args.push(args[i].clone());
             }
         } else if arg.starts_with("--") && arg.contains('=') {
             // Handle --flag=value format
@@ -577,7 +575,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 let selected_package = metadata
                     .packages
                     .iter()
-                    .find(|p| &p.name.as_str() == selected_package)
+                    .find(|p| p.name.as_str() == selected_package)
                     .unwrap_or_else(|| panic!("unknown package: {selected_package}"));
 
                 Some(selected_package.manifest_path.as_std_path().to_path_buf())
