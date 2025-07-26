@@ -15,7 +15,7 @@ use std::{
 pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 
 use anyhow::Context;
-use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, MetadataCommand};
+use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, CrateType, MetadataCommand};
 use filetime::FileTime;
 use gumdrop::Options;
 
@@ -544,7 +544,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 let selected_package = metadata
                     .packages
                     .iter()
-                    .find(|p| &p.name == selected_package)
+                    .find(|p| &p.name.as_str() == selected_package)
                     .unwrap_or_else(|| panic!("unknown package: {selected_package}"));
 
                 Some(selected_package.manifest_path.as_std_path().to_path_buf())
@@ -801,7 +801,11 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
 fn artifact_is_cdylib(artifact: &Artifact) -> bool {
-    artifact.target.crate_types.iter().any(|ty| ty == "cdylib")
+    artifact
+        .target
+        .crate_types
+        .iter()
+        .any(|ty| *ty == CrateType::CDyLib)
 }
 
 // Check if the source file has changed and should be copied over to the destination path.
