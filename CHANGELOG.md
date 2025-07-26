@@ -11,6 +11,7 @@ This version of `cargo-ndk` is much closer to a thin passthrough to `cargo` than
 - **Breaking change**: Removed Cargo.toml-based configuration property handling
 - **Breaking change**: Bump minimum supported Rust version (MSRV) to 1.86 and use Rust edition 2024.
 - **Breaking change**: `--bindgen` has been removed, and relevant environment variables are set by default
+- Enhancement: Can now be built for an Android host (i.e. Termux) if built with `CARGO_NDK_ON_ANDROID` environment variable set
 - Enhancement: CLI flags can now be used in any order (e.g., `cargo ndk -t x86 build` and `cargo ndk build --target x86` are equivalent).
 - Enhancement: Added environment variable support for configuration flags with `CARGO_NDK_` prefix (e.g., `CARGO_NDK_TARGET`, `CARGO_NDK_PLATFORM`, `CARGO_NDK_OUTPUT_DIR`)
 - Enhancement: Target flag now supports comma-delimited lists for specifying multiple targets

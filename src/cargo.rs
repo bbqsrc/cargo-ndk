@@ -14,14 +14,18 @@ use crate::shell::Shell;
 
 #[cfg(target_os = "macos")]
 const ARCH: &str = "darwin-x86_64";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const ARCH: &str = "linux-x86_64";
 #[cfg(target_os = "windows")]
 const ARCH: &str = "windows-x86_64";
 
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(cargo_ndk_on_android)))]
 compile_error!(
-    "You cannot build cargo-ndk _for_ Android. Build it for your host OS and run it with cargo."
+    r#"
+Building cargo-ndk on Android is not supported. This binary is intended to be run on your host OS.
+
+Set CARGO_NDK_ON_ANDROID to override this check (for example, building for Termux)."
+"#
 );
 
 #[cfg(not(any(
@@ -31,8 +35,6 @@ compile_error!(
     target_os = "windows"
 )))]
 compile_error!("Unsupported target OS");
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-const ARCH: &str = "unknown";
 
 pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
     let target = match rust_target {
