@@ -1,4 +1,5 @@
-example/target/
+example/**/target/
+**/jniLibs/*
 .DS_Store
 /target/
 **/*.rs.bk
