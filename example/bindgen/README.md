@@ -12,7 +12,7 @@ Minimal example demonstrating `bindgen` with `cargo-ndk` to generate Rust bindin
 
 ```bash
 # Build for Android target
-cargo ndk --target arm64-v8a build
+cargo ndk --bindgen --target arm64-v8a build
 
 # Run tests
 cargo test

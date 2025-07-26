@@ -98,7 +98,6 @@ pub(crate) fn build_env(
     triple: &str,
     ndk_home: &Path,
     clang_target: &str,
-    bindgen: bool,
 ) -> BTreeMap<String, OsString> {
     let self_path = std::fs::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
@@ -214,19 +213,17 @@ pub(crate) fn build_env(
             .collect();
     }
 
-    if bindgen {
-        let bindgen_args = format!(
-            "--sysroot={} -I{}",
-            &cargo_ndk_sysroot_path.display(),
-            extra_include
-        );
-        let bindgen_clang_args = bindgen_args.replace('\\', "/");
-        // log::debug!("{bindgen_clang_args_key}={bindgen_clang_args:?}");
-        envs.insert(
-            bindgen_clang_args_key.to_string(),
-            bindgen_clang_args.into(),
-        );
-    }
+    let bindgen_args = format!(
+        "--sysroot={} -I{}",
+        &cargo_ndk_sysroot_path.display(),
+        extra_include
+    );
+    let bindgen_clang_args = bindgen_args.replace('\\', "/");
+
+    envs.insert(
+        bindgen_clang_args_key.to_string(),
+        bindgen_clang_args.into(),
+    );
 
     envs
 }
@@ -252,7 +249,6 @@ pub(crate) fn run(
     platform: u8,
     cargo_args: &[String],
     cargo_manifest: &Path,
-    bindgen: bool,
     #[allow(unused_variables)] out_dir: &Utf8PathBuf,
 ) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
     if version.major < 23 {
@@ -272,7 +268,7 @@ pub(crate) fn run(
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(triple, ndk_home, &clang_target, bindgen);
+    let envs = build_env(triple, ndk_home, &clang_target);
 
     shell
         .very_verbose(|shell| {

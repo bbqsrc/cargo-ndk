@@ -5,9 +5,9 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
+    panic,
     path::{Path, PathBuf},
     time::Instant,
-    panic,
 };
 
 // Can be removed when MSRV is bumped to 1.81+.
@@ -36,11 +36,8 @@ struct ArgsEnv {
     #[options(help = "platform (also known as API level)")]
     platform: Option<u8>,
 
-    #[options(
-        no_short,
-        help = "set bindgen-specific environment variables (BINDGEN_EXTRA_CLANG_ARGS_*) when building",
-        default = "false"
-    )]
+    #[options(no_short, help = "deprecated, always true", default = "true")]
+    #[allow(unused)]
     bindgen: bool,
 
     #[options(
@@ -375,7 +372,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     );
 
     // Try command line, then config. Config falls back to defaults in any case.
-    let env = build_env(args.target.triple(), &ndk_home, &clang_target, args.bindgen)
+    let env = build_env(args.target.triple(), &ndk_home, &clang_target)
         .into_iter()
         .filter(|(k, _)| !k.starts_with('_'))
         .collect::<BTreeMap<_, _>>();
@@ -690,7 +687,6 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 platform,
                 &args.cargo_args,
                 &cargo_manifest,
-                args.bindgen,
                 &out_dir,
             )?;
             let code = status.code().unwrap_or(-1);
