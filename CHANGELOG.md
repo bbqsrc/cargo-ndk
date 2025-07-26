@@ -1,6 +1,21 @@
 ## Changelog
 
-- Fix: create output dir before canonicalize
+### UNRELEASED - v4.0.0
+
+This version of `cargo-ndk` is much closer to a thin passthrough to `cargo` than previous versions. Please take note of the breaking changes.
+
+**New MSRV: 1.86**
+
+- **Breaking change**: Replaced gumdrop CLI parsing with clap. This is functionally equivalent but may cause some minor behavioral differences in edge cases
+- **Breaking change**: No longer strips build output by default, and `--no-strip` option is removed
+- **Breaking change**: Removed Cargo.toml-based configuration property handling
+- **Breaking change**: Bump minimum supported Rust version (MSRV) to 1.86 and use Rust edition 2024.
+- **Breaking change**: `--bindgen` has been removed, and relevant environment variables are set by default
+- Enhancement: CLI flags can now be used in any order (e.g., `cargo ndk -t x86 build` and `cargo ndk build --target x86` are equivalent).
+- Enhancement: Added environment variable support for configuration flags with `CARGO_NDK_` prefix (e.g., `CARGO_NDK_TARGET`, `CARGO_NDK_PLATFORM`, `CARGO_NDK_OUTPUT_DIR`)
+- Enhancement: Target flag now supports comma-delimited lists for specifying multiple targets
+- Enhancement: Added cargo-ndk version information to very verbose (`-vv`) output.
+- Fix: Fixed issue where `--manifest-path` and other flags using `--flag=value` format could be passed to cargo twice.
 
 ### v3.5.7 - 2024-08-19
 
