@@ -78,6 +78,16 @@ fn android() {
 
 Add `-v` or `-vv` as you ordinarily would after the cargo command.
 
+### Environment variable configuration
+
+You can configure `cargo-ndk` using environment variables with the `CARGO_NDK_` prefix:
+
+- `CARGO_NDK_TARGET`: Set default target(s) (comma-separated for multiple targets)
+- `CARGO_NDK_PLATFORM`: Set default API platform level  
+- `CARGO_NDK_OUTPUT_DIR`: Set default output directory
+
+These can be overridden by command-line arguments.
+
 ### Providing environment variables for C dependencies
 
 `cargo-ndk` derives which environment variables to read the same way as the `cc` crate.
@@ -92,6 +102,8 @@ These environment variables are exported for use in build scripts and other down
 - `CARGO_NDK_SYSROOT_PATH`: path to the sysroot inside the Android NDK
 - `CARGO_NDK_SYSROOT_TARGET`: the target name for the files inside the sysroot (differs slightly from the standard LLVM triples)
 - `CARGO_NDK_SYSROOT_LIBS_PATH`: path to the libraries inside the sysroot with the given sysroot target (e.g. `$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`)
+
+Environment variables for bindgen are automatically configured and exported as well.
 
 ### Printing the environment
 
@@ -118,6 +130,8 @@ For configuring rust-analyzer, add the `--json` flag and paste the blob into the
 - Linux
 - macOS (`x86_64` and `arm64`)
 - Windows
+
+You can also build for Termux or similar by providing the environment variable `CARGO_NDK_ON_ANDROID` at build-time. Please note that this configuration is *not supported*.
 
 ## Local development
 
