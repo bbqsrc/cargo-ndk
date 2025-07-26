@@ -27,7 +27,7 @@ anyhow = "1.0.98"
 cargo_metadata = "0.21.0"
 dunce = "1.0.5"
 filetime = "0.2.25"
-gumdrop = "0.8.1"
+clap = { version = "4.5", features = ["derive"] }
 is-terminal = "0.4.16"
 libc = "0.2.174"
 pathos = "0.3.0"

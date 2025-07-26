@@ -2,6 +2,8 @@ use std::fmt::Display;
 use std::path::Path;
 use std::str::FromStr;
 
+use clap::builder::PossibleValue;
+use clap::ValueEnum;
 use serde::Deserialize;
 
 use crate::cli::BuildMode;
@@ -83,6 +85,21 @@ pub enum Target {
     X86,
     #[serde(rename = "x86_64")]
     X86_64,
+}
+
+impl ValueEnum for Target {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::ArmeabiV7a, Self::Arm64V8a, Self::X86, Self::X86_64]
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(match self {
+            Self::ArmeabiV7a => PossibleValue::new("armeabi-v7a").alias("armv7-linux-androideabi"),
+            Self::Arm64V8a => PossibleValue::new("arm64-v8a").alias("aarch64-linux-android"),
+            Self::X86 => PossibleValue::new("x86").alias("i686-linux-android"),
+            Self::X86_64 => PossibleValue::new("x86_64").alias("x86_64-linux-android"),
+        })
+    }
 }
 
 impl FromStr for Target {

@@ -17,7 +17,7 @@ pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 use anyhow::Context;
 use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, CrateType, MetadataCommand};
 use filetime::FileTime;
-use gumdrop::Options;
+use clap::Parser;
 
 use crate::{
     cargo::{build_env, clang_target},
@@ -25,69 +25,58 @@ use crate::{
     shell::{Shell, Verbosity},
 };
 
-#[derive(Debug, Options)]
+#[derive(Debug, Parser)]
 struct ArgsEnv {
-    #[options(help = "show help information")]
-    help: bool,
-
-    #[options(long = "version", help = "print version")]
-    version: bool,
-
-    #[options(help = "platform (also known as API level)")]
+    /// platform (also known as API level)
+    #[arg(long)]
     platform: Option<u8>,
 
-    #[options(no_short, help = "deprecated, always true", default = "true")]
+    /// deprecated, always true
+    #[arg(long, default_value = "true")]
     #[allow(unused)]
     bindgen: bool,
 
-    #[options(
-        help = "triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
-    )]
+    /// triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    #[arg(short, long)]
     target: Target,
 
-    #[options(no_short, help = "use PowerShell syntax")]
+    /// use PowerShell syntax
+    #[arg(long)]
     powershell: bool,
 
-    #[options(no_short, help = "print output in JSON format")]
+    /// print output in JSON format
+    #[arg(long)]
     json: bool,
 }
 
-#[derive(Debug, Options)]
+#[derive(Debug, Parser)]
 struct Args {
-    #[options(help = "show help information")]
-    help: bool,
-
-    #[options(long = "version", help = "print version")]
-    version: bool,
-
-    #[options(free, help = "args to be passed to cargo")]
+    /// args to be passed to cargo
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     cargo_args: Vec<String>,
 
-    #[options(
-        meta = "DIR",
-        help = "output to a jniLibs directory in the correct sub-directories"
-    )]
+    /// output to a jniLibs directory in the correct sub-directories
+    #[arg(short, long, value_name = "DIR")]
     output_dir: Option<PathBuf>,
 
-    #[options(help = "platform (also known as API level)")]
+    /// platform (also known as API level)
+    #[arg(long)]
     platform: Option<u8>,
 
-    #[options(no_short, help = "disable stripping debug symbols", default = "false")]
+    /// disable stripping debug symbols
+    #[arg(long)]
     no_strip: bool,
 
-    #[options(no_short, meta = "PATH", help = "path to Cargo.toml")]
+    /// path to Cargo.toml
+    #[arg(long, value_name = "PATH")]
     manifest_path: Option<PathBuf>,
 
-    #[options(
-        no_short,
-        help = "set bindgen-specific environment variables (BINDGEN_EXTRA_CLANG_ARGS_*) when building",
-        default = "false"
-    )]
+    /// set bindgen-specific environment variables (BINDGEN_EXTRA_CLANG_ARGS_*) when building
+    #[arg(long)]
     bindgen: bool,
 
-    #[options(
-        help = "triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64"
-    )]
+    /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    #[arg(short, long)]
     target: Vec<Target>,
 }
 
@@ -167,17 +156,6 @@ fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
     highest_version_ndk_in_path(&ndk_dir).map(|path| (path, "standard location".to_string()))
 }
 
-fn print_usage() {
-    println!("cargo-ndk <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk [OPTIONS] <CARGO_ARGS>\n");
-    println!("{}", Args::usage());
-}
-
-fn print_usage_env() {
-    println!(
-        "cargo-ndk-env <https://github.com/bbqsrc/cargo-ndk>\n\nUsage: cargo ndk-env [OPTIONS]\n"
-    );
-    println!("{}", ArgsEnv::usage());
-}
 
 fn default_ndk_dir() -> PathBuf {
     #[cfg(windows)]
@@ -314,10 +292,17 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
 }
 
 pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
-    if args.contains(&"-h".into()) || args.contains(&"--help".into()) {
-        print_usage_env();
+    // Check for help/version before parsing to avoid required arg errors
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        use clap::CommandFactory;
+        ArgsEnv::command().print_help().unwrap();
         std::process::exit(0);
     }
+    if args.contains(&"--version".to_string()) {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+    
 
     let color = args
         .iter()
@@ -339,15 +324,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     shell.set_verbosity(verbosity);
     shell.set_color_choice(color)?;
 
-    let args = match ArgsEnv::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
-        Ok(args) if args.help => {
-            print_usage();
-            std::process::exit(0);
-        }
-        Ok(args) if args.version => {
-            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-            std::process::exit(0);
-        }
+    let args = match ArgsEnv::try_parse_from(&args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;
@@ -407,8 +384,14 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
-    if args.is_empty() || args.contains(&"-h".into()) || args.contains(&"--help".into()) {
-        print_usage();
+    // Check for help/version before parsing to avoid required arg errors
+    if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        use clap::CommandFactory;
+        Args::command().print_help().unwrap();
+        std::process::exit(0);
+    }
+    if args.contains(&"--version".to_string()) {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
 
@@ -462,15 +445,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             .unwrap_or(BuildMode::Debug)
     };
 
-    let args = match Args::parse_args(&args, gumdrop::ParsingStyle::StopAtFirstFree) {
-        Ok(args) if args.help => {
-            print_usage();
-            std::process::exit(0);
-        }
-        Ok(args) if args.version => {
-            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-            std::process::exit(0);
-        }
+    let args = match Args::try_parse_from(&args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;

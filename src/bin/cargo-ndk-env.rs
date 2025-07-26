@@ -7,7 +7,7 @@ fn main() -> anyhow::Result<()> {
         exit(1);
     }
 
-    let args = std::env::args().skip(2).collect::<Vec<_>>();
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
 
     cargo_ndk::cli::run_env(args)
 }

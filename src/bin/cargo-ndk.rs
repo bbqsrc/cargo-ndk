@@ -46,7 +46,7 @@ fn main() -> anyhow::Result<()> {
         clang_linker_wrapper();
     }
 
-    let args = std::env::args().skip(2).collect::<Vec<_>>();
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
 
     cargo_ndk::cli::run(args)
 }
