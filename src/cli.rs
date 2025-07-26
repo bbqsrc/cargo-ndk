@@ -5,14 +5,10 @@ use std::{
     fmt::Display,
     fs,
     io::{self, ErrorKind},
-    panic,
+    panic::PanicHookInfo,
     path::{Path, PathBuf},
     time::Instant,
 };
-
-// Can be removed when MSRV is bumped to 1.81+.
-#[allow(deprecated)]
-pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 
 use anyhow::Context;
 use cargo_metadata::{Artifact, CrateType, MetadataCommand, camino::Utf8Path, semver::Version};
@@ -489,7 +485,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.set_color_choice(color)?;
 
     if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
-        panic::set_hook(Box::new(panic_hook));
+        std::panic::set_hook(Box::new(panic_hook));
     }
 
     shell.verbose(|shell| {
