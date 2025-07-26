@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::OsString,
-    fs,
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -47,15 +46,6 @@ pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
 fn sysroot_target(rust_target: &str) -> &str {
     (match rust_target {
         "armv7-linux-androideabi" => "arm-linux-androideabi",
-        _ => rust_target,
-    }) as _
-}
-fn rt_builtins(rust_target: &str) -> &str {
-    (match rust_target {
-        "armv7-linux-androideabi" => "arm",
-        "aarch64-linux-android" => "aarch64",
-        "i686-linux-android" => "i686",
-        "x86_64-linux-android" => "x86_64",
         _ => rust_target,
     }) as _
 }
@@ -116,7 +106,6 @@ pub(crate) fn build_env(
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
-    let cargo_rust_flags_key = cargo_env_target_cfg(triple, "rustflags");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
 
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
@@ -141,29 +130,6 @@ pub(crate) fn build_env(
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
     let target_linker = self_path;
-
-    //{}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}
-    let clang_folder: PathBuf = ndk_home
-        .join("toolchains")
-        .join("llvm")
-        .join("prebuilt")
-        .join(ARCH)
-        .join("lib")
-        .join("clang");
-
-    // choose the clang target with the highest version
-    // Should we filter for only numbers?
-    let clang_builtins_target = fs::read_dir(clang_folder)
-        .expect("Unable to get clang target directory")
-        .filter_map(|a| a.ok())
-        .max_by(|a, b| a.file_name().cmp(&b.file_name()))
-        .expect("Unable to get clang target")
-        .path();
-    let clang_rt = format!(
-        "-L{} -lstatic=clang_rt.builtins-{}-android",
-        clang_builtins_target.join("lib").join("linux").display(),
-        rt_builtins(triple)
-    );
 
     let extra_include = format!(
         "{}/usr/include/{}",
@@ -192,7 +158,6 @@ pub(crate) fn build_env(
             cargo_ndk_sysroot_target_key.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
-        (cargo_rust_flags_key, clang_rt.into()),
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
         ("CLANG_PATH".into(), target_cc.clone().into()),
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
