@@ -333,14 +333,3 @@ pub(crate) fn run(
 
     Ok((status, artifacts))
 }
-
-pub(crate) fn strip(ndk_home: &Path, bin_path: &Path) -> std::process::ExitStatus {
-    let target_strip = ndk_home.join(ndk_tool(ARCH, "llvm-strip"));
-
-    // log::debug!("strip: {}", &target_strip.display());
-
-    Command::new(target_strip)
-        .arg(bin_path)
-        .status()
-        .expect("strip crashed")
-}

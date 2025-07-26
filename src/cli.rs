@@ -27,18 +27,13 @@ use crate::{
 
 #[derive(Debug, Parser)]
 struct ArgsEnv {
-    /// platform (also known as API level)
-    #[arg(long)]
-    platform: Option<u8>,
-
-    /// deprecated, always true
-    #[arg(long, default_value = "true")]
-    #[allow(unused)]
-    bindgen: bool,
-
     /// triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
     #[arg(short, long)]
     target: Target,
+
+    /// platform (also known as API level)
+    #[arg(long)]
+    platform: Option<u8>,
 
     /// use PowerShell syntax
     #[arg(long)]
@@ -51,33 +46,25 @@ struct ArgsEnv {
 
 #[derive(Debug, Parser)]
 struct Args {
-    /// args to be passed to cargo
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    cargo_args: Vec<String>,
-
-    /// output to a jniLibs directory in the correct sub-directories
-    #[arg(short, long, value_name = "DIR")]
-    output_dir: Option<PathBuf>,
+    /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    #[arg(short, long)]
+    target: Vec<Target>,
 
     /// platform (also known as API level)
     #[arg(long)]
     platform: Option<u8>,
 
-    /// disable stripping debug symbols
-    #[arg(long)]
-    no_strip: bool,
+    /// output to a jniLibs directory in the correct sub-directories
+    #[arg(short, long, value_name = "DIR")]
+    output_dir: Option<PathBuf>,
 
     /// path to Cargo.toml
     #[arg(long, value_name = "PATH")]
     manifest_path: Option<PathBuf>,
 
-    /// set bindgen-specific environment variables (BINDGEN_EXTRA_CLANG_ARGS_*) when building
-    #[arg(long)]
-    bindgen: bool,
-
-    /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
-    #[arg(short, long)]
-    target: Vec<Target>,
+    /// args to be passed to cargo
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    cargo_args: Vec<String>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -818,16 +805,6 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     ),
                 )
                 .with_context(|| format!("unable to update the modification time of {dest:?}"))?;
-
-                if !args.no_strip {
-                    shell.verbose(|shell| {
-                        shell.status(
-                            "Stripping",
-                            format!("{}", &dunce::canonicalize(&dest).unwrap().display()),
-                        )
-                    })?;
-                    let _ = crate::cargo::strip(&ndk_home, &dest);
-                }
             }
         }
     }
