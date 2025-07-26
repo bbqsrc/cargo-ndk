@@ -15,25 +15,24 @@ use std::{
 pub type PanicHookInfo<'a> = std::panic::PanicInfo<'a>;
 
 use anyhow::Context;
-use cargo_metadata::{camino::Utf8Path, semver::Version, Artifact, CrateType, MetadataCommand};
+use cargo_metadata::{Artifact, CrateType, MetadataCommand, camino::Utf8Path, semver::Version};
 use clap::Parser;
 use filetime::FileTime;
 
 use crate::{
     cargo::{build_env, clang_target},
-    meta::{default_targets, Target},
+    meta::{Target, default_targets},
     shell::{Shell, Verbosity},
-    
 };
 
 #[derive(Debug, Parser)]
 struct ArgsEnv {
     /// triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
-    #[arg(short, long)]
+    #[arg(short, long, env = "CARGO_NDK_TARGET")]
     target: Target,
 
     /// platform (also known as API level)
-    #[arg(long, default_value_t = 21)]
+    #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
     /// use PowerShell syntax
@@ -48,15 +47,15 @@ struct ArgsEnv {
 #[derive(Debug, Parser)]
 struct Args {
     /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
-    #[arg(short, long)]
+    #[arg(short, long, env = "CARGO_NDK_TARGET", value_delimiter = ',')]
     target: Vec<Target>,
 
     /// platform (also known as API level)
-    #[arg(long, default_value_t = 21)]
+    #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
     /// output to a jniLibs directory in the correct sub-directories
-    #[arg(short, long, value_name = "DIR")]
+    #[arg(short, long, value_name = "DIR", env = "CARGO_NDK_OUTPUT_DIR")]
     output_dir: Option<PathBuf>,
 
     /// path to Cargo.toml
@@ -329,10 +328,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
         }
     };
 
-    let clang_target = clang_target(
-        args.target.triple(),
-        args.platform,
-    );
+    let clang_target = clang_target(args.target.triple(), args.platform);
 
     // Try command line, then config. Config falls back to defaults in any case.
     let env = build_env(args.target.triple(), &ndk_home, &clang_target)
@@ -595,7 +591,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             termcolor::Color::Cyan,
         )
     })?;
-    env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
+    unsafe {
+        env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
+    }
 
     let platform = args.platform;
 
@@ -633,7 +631,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             )
         })?;
 
-        std::env::set_var("CARGO_NDK_OUTPUT_PATH", output_dir);
+        unsafe {
+            std::env::set_var("CARGO_NDK_OUTPUT_PATH", output_dir);
+        }
     }
 
     shell.verbose(|shell| {
@@ -644,7 +644,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         )
     })?;
 
-    env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
+    unsafe {
+        env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
+    }
     shell.verbose(|shell| {
         shell.status_with_color(
             "Building",
@@ -675,7 +677,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     termcolor::Color::Cyan,
                 )
             })?;
-            env::set_var("CARGO_NDK_ANDROID_PLATFORM", target.to_string());
+            unsafe {
+                env::set_var("CARGO_NDK_ANDROID_PLATFORM", target.to_string());
+            }
 
             // Set ANDROID_PLATFORM (API level)
             shell.very_verbose(|shell| {
@@ -685,7 +689,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     termcolor::Color::Cyan,
                 )
             })?;
-            env::set_var("ANDROID_PLATFORM", platform.to_string());
+            unsafe {
+                env::set_var("ANDROID_PLATFORM", platform.to_string());
+            }
 
             // Set ANDROID_ABI using the Android-specific target name
             let android_abi = target.to_string();
@@ -696,7 +702,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     termcolor::Color::Cyan,
                 )
             })?;
-            env::set_var("ANDROID_ABI", android_abi);
+            unsafe {
+                env::set_var("ANDROID_ABI", android_abi);
+            }
 
             let (status, artifacts) = crate::cargo::run(
                 &mut shell,

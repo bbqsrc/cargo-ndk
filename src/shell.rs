@@ -588,7 +588,6 @@ mod imp {
 mod imp {
     use std::{cmp, mem, ptr};
 
-    use windows_sys::core::PCSTR;
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE};
@@ -596,10 +595,11 @@ mod imp {
         CreateFileA, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
     use windows_sys::Win32::System::Console::{
-        GetConsoleScreenBufferInfo, GetStdHandle, CONSOLE_SCREEN_BUFFER_INFO, STD_ERROR_HANDLE,
+        CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo, GetStdHandle, STD_ERROR_HANDLE,
     };
+    use windows_sys::core::PCSTR;
 
-    pub(super) use super::{default_err_erase_line as err_erase_line, TtyWidth};
+    pub(super) use super::{TtyWidth, default_err_erase_line as err_erase_line};
 
     pub fn stderr_width() -> TtyWidth {
         unsafe {

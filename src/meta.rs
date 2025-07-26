@@ -1,8 +1,8 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use clap::builder::PossibleValue;
 use clap::ValueEnum;
+use clap::builder::PossibleValue;
 use serde::Deserialize;
 
 pub(crate) fn default_targets() -> &'static [Target] {

@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use cargo_metadata::{camino::Utf8PathBuf, semver::Version, Artifact, Message};
+use cargo_metadata::{Artifact, Message, camino::Utf8PathBuf, semver::Version};
 
 use crate::shell::Shell;
 
