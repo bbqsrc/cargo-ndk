@@ -436,6 +436,14 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         panic::set_hook(Box::new(panic_hook));
     }
 
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Using",
+            format!("cargo-ndk v{}", env!("CARGO_PKG_VERSION"),),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
     if !is_supported_rustc_version() {
         shell.error("Rust compiler is too old and not supported by cargo-ndk.")?;
         shell.note("Upgrade Rust to at least v1.68.0.")?;
