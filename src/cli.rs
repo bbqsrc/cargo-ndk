@@ -420,6 +420,14 @@ fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
                     global_args.push(args[i].clone());
                 }
             }
+        } else if arg.starts_with("--") && arg.contains('=') {
+            // Handle --flag=value format
+            let flag_name = arg.split('=').next().unwrap();
+            if global_flags.contains(&flag_name.to_string()) {
+                global_args.push(arg.clone());
+            } else {
+                cargo_args.push(arg.clone());
+            }
         } else {
             // This is a cargo arg
             cargo_args.push(arg.clone());
