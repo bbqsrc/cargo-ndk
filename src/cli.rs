@@ -21,8 +21,9 @@ use filetime::FileTime;
 
 use crate::{
     cargo::{build_env, clang_target},
-    meta::{Ndk, Target},
+    meta::{default_targets, Target},
     shell::{Shell, Verbosity},
+    
 };
 
 #[derive(Debug, Parser)]
@@ -32,8 +33,8 @@ struct ArgsEnv {
     target: Target,
 
     /// platform (also known as API level)
-    #[arg(long)]
-    platform: Option<u8>,
+    #[arg(long, default_value_t = 21)]
+    platform: u8,
 
     /// use PowerShell syntax
     #[arg(long)]
@@ -51,8 +52,8 @@ struct Args {
     target: Vec<Target>,
 
     /// platform (also known as API level)
-    #[arg(long)]
-    platform: Option<u8>,
+    #[arg(long, default_value_t = 21)]
+    platform: u8,
 
     /// output to a jniLibs directory in the correct sub-directories
     #[arg(short, long, value_name = "DIR")]
@@ -330,7 +331,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
 
     let clang_target = clang_target(
         args.target.triple(),
-        args.platform.unwrap_or(Ndk::default().platform),
+        args.platform,
     );
 
     // Try command line, then config. Config falls back to defaults in any case.
@@ -490,18 +491,6 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let build_mode = if args.contains(&"--release".into()) {
-        BuildMode::Release
-    } else if let Some(i) = args.iter().position(|x| x == "--profile") {
-        args.get(i + 1)
-            .map(|p| BuildMode::from(p.as_str()))
-            .unwrap_or(BuildMode::Debug)
-    } else {
-        args.iter()
-            .find_map(|a| a.strip_prefix("--profile=").map(BuildMode::from))
-            .unwrap_or(BuildMode::Debug)
-    };
-
     let args = match parse_mixed_args(args) {
         Ok(args) => args,
         Err(e) => {
@@ -594,15 +583,6 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         })
         .unwrap_or_else(|| working_dir.join("Cargo.toml"));
 
-    let config = match crate::meta::config(&cargo_manifest, &build_mode) {
-        Ok(v) => v,
-        Err(e) => {
-            shell.error("Failed loading manifest")?;
-            shell.error(e)?;
-            std::process::exit(1);
-        }
-    };
-
     let cmake_toolchain_path = ndk_home
         .join("build")
         .join("cmake")
@@ -617,13 +597,13 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
     env::set_var("CARGO_NDK_CMAKE_TOOLCHAIN_PATH", cmake_toolchain_path);
 
-    let platform = args.platform.unwrap_or(config.platform);
+    let platform = args.platform;
 
     // Try command line, then config. Config falls back to defaults in any case.
     let targets = if !args.target.is_empty() {
         args.target
     } else {
-        config.targets
+        default_targets().to_vec()
     };
 
     if let Some(output_dir) = args.output_dir.as_ref() {
