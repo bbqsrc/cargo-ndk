@@ -15,19 +15,29 @@ use std::process::exit;
 /// Cargo.
 fn clang_linker_wrapper() -> ! {
     let args = std::env::args_os().skip(1);
+
     let clang = std::env::var("_CARGO_NDK_LINK_CLANG")
         .expect("cargo-ndk rustc linker: didn't find _CARGO_NDK_LINK_CLANG env var");
     let target = std::env::var("_CARGO_NDK_LINK_TARGET")
         .expect("cargo-ndk rustc linker: didn't find _CARGO_NDK_LINK_TARGET env var");
 
-    let mut child = std::process::Command::new(&clang)
-        .arg(target)
-        .args(args)
-        .spawn()
-        .unwrap_or_else(|err| {
-            eprintln!("cargo-ndk: Failed to spawn {clang:?} as linker: {err}");
-            std::process::exit(1)
-        });
+    let mut cmd = std::process::Command::new(&clang);
+    cmd.arg(target);
+
+    if let Ok(builtins_path) = std::env::var("_CARGO_NDK_LINK_BUILTINS") {
+        cmd.arg(format!("-L{}", builtins_path));
+
+        // Extract arch from target triple (e.g., "aarch64-linux-android21" -> "aarch64")
+        let arch = std::env::var("CARGO_NDK_SYSROOT_TARGET")
+            .expect("cargo-ndk rustc linker: didn't find CARGO_NDK_SYSROOT_TARGET");
+        let arch = arch.split('-').next().unwrap();
+        cmd.arg(format!("-lclang_rt.builtins-{}-android", arch));
+    }
+
+    let mut child = cmd.args(args).spawn().unwrap_or_else(|err| {
+        eprintln!("cargo-ndk: Failed to spawn {clang:?} as linker: {err}");
+        std::process::exit(1)
+    });
     let status = child.wait().unwrap_or_else(|err| {
         eprintln!("cargo-ndk (as linker): Failed to wait for {clang:?} to complete: {err}");
         std::process::exit(1);

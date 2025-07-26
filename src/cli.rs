@@ -35,6 +35,10 @@ struct ArgsEnv {
     #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
+    /// Links Clang builtins library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
+    link_builtins: bool,
+
     /// use PowerShell syntax
     #[arg(long)]
     powershell: bool,
@@ -53,6 +57,10 @@ struct Args {
     /// platform (also known as API level)
     #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
+
+    /// Links Clang builtins library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
+    link_builtins: bool,
 
     /// output to a jniLibs directory in the correct sub-directories
     #[arg(short, long, value_name = "DIR", env = "CARGO_NDK_OUTPUT_DIR")]
@@ -331,10 +339,15 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     let clang_target = clang_target(args.target.triple(), args.platform);
 
     // Try command line, then config. Config falls back to defaults in any case.
-    let env = build_env(args.target.triple(), &ndk_home, &clang_target)
-        .into_iter()
-        .filter(|(k, _)| !k.starts_with('_'))
-        .collect::<BTreeMap<_, _>>();
+    let env = build_env(
+        args.target.triple(),
+        &ndk_home,
+        &clang_target,
+        args.link_builtins,
+    )
+    .into_iter()
+    .filter(|(k, _)| !k.starts_with('_'))
+    .collect::<BTreeMap<_, _>>();
 
     if args.json {
         println!(
@@ -719,9 +732,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 &ndk_version,
                 triple,
                 platform,
+                args.link_builtins,
                 &args.cargo_args,
                 &cargo_manifest,
-                &out_dir,
             )?;
             let code = status.code().unwrap_or(-1);
 

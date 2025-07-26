@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use cargo_metadata::{Artifact, Message, camino::Utf8PathBuf, semver::Version};
+use cargo_metadata::{Artifact, Message, semver::Version};
 
 use crate::shell::Shell;
 
@@ -86,10 +86,35 @@ fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
         .unwrap_or_else(|| (most_specific_key, None))
 }
 
+#[inline]
+// {}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux
+fn clang_lib_path(ndk_home: &Path) -> PathBuf {
+    let clang_folder: PathBuf = ndk_home
+        .join("toolchains")
+        .join("llvm")
+        .join("prebuilt")
+        .join(ARCH)
+        .join("lib")
+        .join("clang");
+
+    let clang_lib_version = std::fs::read_dir(&clang_folder)
+        .expect("Unable to get clang target directory")
+        .filter_map(|a| a.ok())
+        .max_by(|a, b| a.file_name().cmp(&b.file_name()))
+        .expect("Unable to get clang target")
+        .path();
+
+    clang_folder
+        .join(clang_lib_version)
+        .join("lib")
+        .join("linux")
+}
+
 pub(crate) fn build_env(
     triple: &str,
     ndk_home: &Path,
     clang_target: &str,
+    link_builtins: bool,
 ) -> BTreeMap<String, OsString> {
     let self_path = std::fs::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
@@ -168,6 +193,11 @@ pub(crate) fn build_env(
     .into_iter()
     .collect::<BTreeMap<String, OsString>>();
 
+    if link_builtins {
+        let builtins_path = clang_lib_path(ndk_home);
+        envs.insert("_CARGO_NDK_LINK_BUILTINS".to_string(), builtins_path.into());
+    }
+
     if env::var("MSYSTEM").is_ok() || env::var("CYGWIN").is_ok() {
         envs = envs
             .into_iter()
@@ -214,9 +244,9 @@ pub(crate) fn run(
     version: &Version,
     triple: &str,
     platform: u8,
+    link_builtins: bool,
     cargo_args: &[String],
     cargo_manifest: &Path,
-    #[allow(unused_variables)] out_dir: &Utf8PathBuf,
 ) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
     if version.major < 23 {
         shell.error("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.").unwrap();
@@ -235,7 +265,7 @@ pub(crate) fn run(
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(triple, ndk_home, &clang_target);
+    let envs = build_env(triple, ndk_home, &clang_target, link_builtins);
 
     shell
         .very_verbose(|shell| {
