@@ -7,6 +7,7 @@ use std::{
     io::{self, ErrorKind},
     panic::PanicHookInfo,
     path::{Path, PathBuf},
+    process::Command,
     time::Instant,
 };
 
@@ -44,8 +45,8 @@ struct ArgsEnv {
     json: bool,
 }
 
-#[derive(Debug, Parser)]
-struct Args {
+#[derive(Debug, Parser, Clone)]
+struct BuildArgs {
     /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
     #[arg(short, long, env = "CARGO_NDK_TARGET", value_delimiter = ',')]
     target: Vec<Target>,
@@ -67,6 +68,29 @@ struct Args {
     manifest_path: Option<PathBuf>,
 
     /// args to be passed to cargo
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    cargo_args: Vec<String>,
+}
+
+#[derive(Debug, Parser, Clone)]
+struct TestArgs {
+    /// Android target to test on. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    #[arg(short, long, env = "CARGO_NDK_TARGET")]
+    target: Target,
+
+    /// platform (also known as API level)
+    #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
+    platform: u8,
+
+    /// Links Clang builtins library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
+    link_builtins: bool,
+
+    /// path to Cargo.toml
+    #[arg(long, value_name = "PATH")]
+    manifest_path: Option<PathBuf>,
+
+    /// args to be passed to cargo test
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     cargo_args: Vec<String>,
 }
@@ -175,6 +199,38 @@ fn default_ndk_dir() -> PathBuf {
     let dir = PathBuf::new();
 
     dir
+}
+
+/// Return a path to adb executable, resolving from ANDROID_HOME or ANDROID_SDK_ROOT
+fn derive_adb_path(shell: &mut Shell) -> anyhow::Result<PathBuf> {
+    let sdk_vars = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_SDK_HOME"];
+    if let Some((_, sdk_path)) = find_first_consistent_var_set(&sdk_vars, shell) {
+        let adb_path = PathBuf::from(&sdk_path).join("platform-tools").join("adb");
+        #[cfg(windows)]
+        let adb_path = adb_path.with_extension("exe");
+
+        if adb_path.exists() {
+            return Ok(adb_path);
+        }
+    }
+
+    // Fallback to system PATH
+    #[cfg(windows)]
+    let adb_name = "adb.exe";
+    #[cfg(not(windows))]
+    let adb_name = "adb";
+
+    if let Ok(output) = Command::new("which").arg(adb_name).output() {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout);
+            let path_str = path_str.trim();
+            return Ok(PathBuf::from(path_str));
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Could not find adb. Please set ANDROID_HOME or ensure adb is in your PATH."
+    ))
 }
 
 fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
@@ -375,9 +431,11 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
 }
 
 /// Parse arguments that can appear both before and after the cargo subcommand
-fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
-    use clap::CommandFactory;
-
+fn parse_mixed_args<T>(args: Vec<String>) -> anyhow::Result<T>
+where
+    T: clap::Parser + Clone + clap::CommandFactory,
+    T: HasCargoArgs,
+{
     let mut global_args = vec!["cargo-ndk".to_string()];
     let mut cargo_args = Vec::new();
 
@@ -385,7 +443,7 @@ fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
     let mut i = 1;
 
     // Get all flags from the Args struct programmatically
-    let cmd = Args::command();
+    let cmd = T::command();
     let mut global_flags = Vec::new();
     let mut value_flags = Vec::new();
 
@@ -444,19 +502,29 @@ fn parse_mixed_args(args: Vec<String>) -> anyhow::Result<Args> {
     }
 
     // Parse the extracted global args
-    let mut parsed_args = Args::try_parse_from(&global_args)?;
+    let mut parsed_args = T::try_parse_from(&global_args)?;
 
     // Set the cleaned cargo_args directly
-    parsed_args.cargo_args = cargo_args;
+    parsed_args.set_cargo_args(cargo_args);
 
     Ok(parsed_args)
+}
+
+trait HasCargoArgs {
+    fn set_cargo_args(&mut self, args: Vec<String>);
+}
+
+impl HasCargoArgs for BuildArgs {
+    fn set_cargo_args(&mut self, args: Vec<String>) {
+        self.cargo_args = args;
+    }
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
     if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
         use clap::CommandFactory;
-        Args::command().print_help().unwrap();
+        BuildArgs::command().print_help().unwrap();
         std::process::exit(0);
     }
     if args.contains(&"--version".to_string()) {
@@ -502,7 +570,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let args = match parse_mixed_args(args) {
+    let args = match parse_mixed_args::<BuildArgs>(args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;
@@ -830,6 +898,321 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
 
     Ok(())
+}
+
+pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
+    // Check for help/version before parsing to avoid required arg errors
+    if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        use clap::CommandFactory;
+        TestArgs::command().print_help().unwrap();
+        std::process::exit(0);
+    }
+    if args.contains(&"--version".to_string()) {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
+    let verbosity = if args.contains(&"-q".into()) {
+        Verbosity::Quiet
+    } else if args.contains(&"-vv".into()) {
+        Verbosity::VeryVerbose
+    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
+        Verbosity::Verbose
+    } else {
+        Verbosity::Normal
+    };
+
+    let color = args
+        .iter()
+        .position(|x| x == "--color")
+        .and_then(|p| args.get(p + 1))
+        .map(|x| &**x);
+
+    let mut shell = Shell::new();
+    shell.set_verbosity(verbosity);
+    shell.set_color_choice(color)?;
+
+    if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
+        std::panic::set_hook(Box::new(panic_hook));
+    }
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Using",
+            format!("cargo-ndk v{} (test mode)", env!("CARGO_PKG_VERSION"),),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    if !is_supported_rustc_version() {
+        shell.error("Rust compiler is too old and not supported by cargo-ndk.")?;
+        shell.note("Upgrade Rust to at least v1.68.0.")?;
+        std::process::exit(1);
+    }
+
+    let args = match TestArgs::try_parse_from(&args) {
+        Ok(args) => args,
+        Err(e) => {
+            shell.error(e)?;
+            std::process::exit(2);
+        }
+    };
+
+    // Get adb path
+    let adb_path = match derive_adb_path(&mut shell) {
+        Ok(path) => path,
+        Err(e) => {
+            shell.error(e)?;
+            std::process::exit(1);
+        }
+    };
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Found",
+            format!("adb at {}", adb_path.display()),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    // Get NDK path for building
+    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
+        Some((path, method)) => (path, method),
+        None => {
+            shell.error("Could not find any NDK.")?;
+            shell.note(
+                "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
+            )?;
+            std::process::exit(1);
+        }
+    };
+
+    let ndk_version = match derive_ndk_version(&ndk_home) {
+        Ok(v) => v,
+        Err(e) => {
+            shell.error(format!(
+                "Error detecting NDK version for path {}",
+                ndk_home.display()
+            ))?;
+            shell.error(e)?;
+            std::process::exit(1);
+        }
+    };
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Detected",
+            format!(
+                "NDK v{} ({}) [{}]",
+                ndk_version,
+                ndk_home.display(),
+                ndk_detection_method
+            ),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    // Create temporary directory for test build
+    let temp_dir = tempfile::tempdir()?;
+    let temp_target_dir = temp_dir.path().join("target");
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Using",
+            format!("temporary target directory: {}", temp_target_dir.display()),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    let working_dir = env::current_dir().expect("current directory could not be resolved");
+    let target = args.target;
+    let platform = args.platform;
+
+    // Set up environment for cargo test build
+    let triple = target.triple();
+    let clang_target = crate::cargo::clang_target(triple, platform);
+
+    let env_vars = crate::cargo::build_env(triple, &ndk_home, &clang_target, args.link_builtins);
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Building",
+            format!("test binary for {} ({})", &target, &triple),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    // Build test binary with --no-run
+    let mut test_cmd = Command::new("cargo");
+    test_cmd
+        .arg("test")
+        .arg("--no-run")
+        .arg("--target")
+        .arg(&triple)
+        .arg("--target-dir")
+        .arg(&temp_target_dir);
+
+    if let Some(manifest_path) = &args.manifest_path {
+        test_cmd.arg("--manifest-path").arg(manifest_path);
+    }
+
+    // Add custom cargo args
+    test_cmd.args(&args.cargo_args);
+
+    // Set environment variables
+    for (key, value) in env_vars {
+        test_cmd.env(key, value);
+    }
+
+    test_cmd.current_dir(&working_dir);
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Running",
+            format!(
+                "cargo test --no-run --target {} --target-dir {}",
+                triple,
+                temp_target_dir.display()
+            ),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    let status = test_cmd.status()?;
+    if !status.success() {
+        shell.error("Failed to build test binary")?;
+        std::process::exit(status.code().unwrap_or(1));
+    }
+
+    // Find the test binary
+    let test_binary_path = find_test_binary(&temp_target_dir, &triple, &mut shell)?;
+
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Found",
+            format!("test binary: {}", test_binary_path.display()),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
+    // Push binary to device
+    let device_path = format!(
+        "/data/local/tmp/{}",
+        test_binary_path.file_name().unwrap().to_string_lossy()
+    );
+
+    shell.status("Pushing", format!("test binary to device: {}", device_path))?;
+
+    let push_status = Command::new(&adb_path)
+        .arg("push")
+        .arg(&test_binary_path)
+        .arg(&device_path)
+        .status()?;
+
+    if !push_status.success() {
+        shell.error("Failed to push test binary to device")?;
+        std::process::exit(push_status.code().unwrap_or(1));
+    }
+
+    // Make binary executable
+    let chmod_status = Command::new(&adb_path)
+        .arg("shell")
+        .arg("chmod")
+        .arg("755")
+        .arg(&device_path)
+        .status()?;
+
+    if !chmod_status.success() {
+        shell.error("Failed to make test binary executable")?;
+        std::process::exit(chmod_status.code().unwrap_or(1));
+    }
+
+    // Run the test binary on device
+    shell.status("Running", "tests on device")?;
+
+    let run_status = Command::new(&adb_path)
+        .arg("shell")
+        .arg(&device_path)
+        .status()?;
+
+    // Clean up the binary from device
+    let _ = Command::new(&adb_path)
+        .arg("shell")
+        .arg("rm")
+        .arg(&device_path)
+        .status();
+
+    if !run_status.success() {
+        shell.error("Tests failed on device")?;
+        std::process::exit(run_status.code().unwrap_or(1));
+    }
+
+    shell.status("Finished", "tests passed on device")?;
+    Ok(())
+}
+
+fn find_test_binary(target_dir: &Path, triple: &str, shell: &mut Shell) -> anyhow::Result<PathBuf> {
+    let deps_dir = target_dir.join(triple).join("debug").join("deps");
+
+    if !deps_dir.exists() {
+        return Err(anyhow::anyhow!(
+            "Test build directory not found: {}",
+            deps_dir.display()
+        ));
+    }
+
+    // Look for test executables in the deps directory
+    for entry in fs::read_dir(&deps_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                // Test binaries typically have names ending with a hash
+                if file_name.contains('-')
+                    && !file_name.ends_with(".d")
+                    && !file_name.ends_with(".so")
+                {
+                    // Check if it's executable by trying to read it
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            if metadata.permissions().mode() & 0o111 != 0 {
+                                shell.very_verbose(|shell| {
+                                    shell.status(
+                                        "Found",
+                                        format!("potential test binary: {}", path.display()),
+                                    )
+                                })?;
+                                return Ok(path);
+                            }
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            // On non-Unix systems, just check if it's not a library
+                            if !file_name.contains(".")
+                                || (!file_name.ends_with(".dll") && !file_name.ends_with(".lib"))
+                            {
+                                shell.very_verbose(|shell| {
+                                    shell.status(
+                                        "Found",
+                                        format!("potential test binary: {}", path.display()),
+                                    )
+                                })?;
+                                return Ok(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "No test binary found in {}",
+        deps_dir.display()
+    ))
 }
 
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
