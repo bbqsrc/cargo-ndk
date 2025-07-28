@@ -6,7 +6,7 @@ edition = "2018"
 
 [lib]
 # This must contain at least cdylib for Android libraries to be generated.
-crate-type = ["cdylib"]
+crate-type = ["rlib", "cdylib"]
 
 # If you want your Android docs to appear on docs.rs, add one of the Android
 # triplets like this:

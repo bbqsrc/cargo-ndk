@@ -32,6 +32,14 @@ the `ANDROID_NDK_HOME` environment variable.
 
 ### Examples
 
+#### Running your tests on an Android device
+
+```
+cargo ndk-test -t armeabi-v7a
+```
+
+This uses `adb` under the hood to push the binaries to a connected device, and running it in the Android shell.
+
 #### Building a library for 32-bit and 64-bit ARM systems
 
 ```

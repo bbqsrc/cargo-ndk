@@ -7,7 +7,7 @@ use std::{
     io::{self, ErrorKind},
     panic::PanicHookInfo,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     time::Instant,
 };
 
@@ -21,6 +21,19 @@ use crate::{
     meta::{Target, default_targets},
     shell::{Shell, Verbosity},
 };
+
+trait CommandExt {
+    fn with_serial(self, serial: Option<&str>) -> Self;
+}
+
+impl CommandExt for Command {
+    fn with_serial(mut self, serial: Option<&str>) -> Self {
+        if let Some(serial) = serial {
+            self.arg("-s").arg(serial);
+        }
+        self
+    }
+}
 
 #[derive(Debug, Parser)]
 struct ArgsEnv {
@@ -90,9 +103,21 @@ struct TestArgs {
     #[arg(long, value_name = "PATH")]
     manifest_path: Option<PathBuf>,
 
-    /// args to be passed to cargo test
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    #[arg(long, env = "CARGO_NDK_ADB_SERIAL")]
+    /// serial number of the device to use for testing (e.g. "emulator-5554" or "0123456789ABCDEF")
+    ///
+    /// You can find the serial number of your device by running `adb devices`.
+    ///
+    /// If not set, the first available device will be used.
+    adb_serial: Option<String>,
+
+    /// arguments to be passed to cargo test
+    #[arg(allow_hyphen_values = true)]
     cargo_args: Vec<String>,
+
+    #[arg(last = true)]
+    /// additional arguments to pass to the test binary on device
+    test_args: Vec<String>,
 }
 
 fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
@@ -900,23 +925,34 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub struct TestUnit {
+    executable: PathBuf,
+    name: String,
+    rel_path: String,
+}
+
 pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+    let valid_args = args.split(|x| x == "--").next().unwrap_or(&args);
+
+    if valid_args.is_empty()
+        || valid_args.contains(&"--help".to_string())
+        || valid_args.contains(&"-h".to_string())
+    {
         use clap::CommandFactory;
         TestArgs::command().print_help().unwrap();
         std::process::exit(0);
     }
-    if args.contains(&"--version".to_string()) {
+    if valid_args.contains(&"--version".to_string()) {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
 
-    let verbosity = if args.contains(&"-q".into()) {
+    let verbosity = if valid_args.contains(&"-q".into()) {
         Verbosity::Quiet
-    } else if args.contains(&"-vv".into()) {
+    } else if valid_args.contains(&"-vv".into()) {
         Verbosity::VeryVerbose
-    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
+    } else if valid_args.contains(&"-v".into()) || valid_args.contains(&"--verbose".into()) {
         Verbosity::Verbose
     } else {
         Verbosity::Normal
@@ -950,13 +986,19 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let args = match TestArgs::try_parse_from(&args) {
+    let mut args = match TestArgs::try_parse_from(&args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;
             std::process::exit(2);
         }
     };
+
+    // Workaround for -- capturing being weird in clap
+    if let Some(idx) = args.cargo_args.iter().rposition(|x| x == "--") {
+        args.test_args.extend(args.cargo_args.split_off(idx + 1));
+        args.cargo_args.truncate(idx);
+    }
 
     // Get adb path
     let adb_path = match derive_adb_path(&mut shell) {
@@ -1012,18 +1054,6 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
         )
     })?;
 
-    // Create temporary directory for test build
-    let temp_dir = tempfile::tempdir()?;
-    let temp_target_dir = temp_dir.path().join("target");
-
-    shell.verbose(|shell| {
-        shell.status_with_color(
-            "Using",
-            format!("temporary target directory: {}", temp_target_dir.display()),
-            termcolor::Color::Cyan,
-        )
-    })?;
-
     let working_dir = env::current_dir().expect("current directory could not be resolved");
     let target = args.target;
     let platform = args.platform;
@@ -1045,174 +1075,187 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
     // Build test binary with --no-run
     let mut test_cmd = Command::new("cargo");
     test_cmd
-        .arg("test")
-        .arg("--no-run")
-        .arg("--target")
-        .arg(&triple)
-        .arg("--target-dir")
-        .arg(&temp_target_dir);
+        .args([
+            "test",
+            "--no-run",
+            "--message-format",
+            "json",
+            "--target",
+            triple,
+        ])
+        .args(&args.cargo_args)
+        .envs(env_vars)
+        .stderr(Stdio::inherit())
+        .current_dir(&working_dir);
 
     if let Some(manifest_path) = &args.manifest_path {
         test_cmd.arg("--manifest-path").arg(manifest_path);
     }
 
-    // Add custom cargo args
-    test_cmd.args(&args.cargo_args);
+    let output = test_cmd.output()?;
 
-    // Set environment variables
-    for (key, value) in env_vars {
-        test_cmd.env(key, value);
+    let test_binary_paths = output
+        .stdout
+        .split(|c| *c == b'\n')
+        .filter_map(|x| serde_json::from_slice::<serde_json::Value>(x).ok())
+        .filter_map(|blob| {
+            let artifact = blob.as_object()?;
+
+            let Some(serde_json::Value::String(reason)) = artifact.get("reason") else {
+                return None;
+            };
+
+            if reason == "compiler-artifact" {
+                let executable = artifact
+                    .get("executable")
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)?;
+
+                let manifest_path = artifact
+                    .get("manifest_path")
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)?;
+
+                let src_path = artifact
+                    .get("target")
+                    .and_then(|v| v.get("src_path"))
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from)?;
+
+                let working_path = manifest_path.parent().unwrap();
+
+                let rel_path = executable
+                    .strip_prefix(working_path)
+                    .unwrap_or(&executable)
+                    .to_string_lossy()
+                    .to_string();
+
+                let src_path = src_path
+                    .strip_prefix(working_path)
+                    .unwrap_or(&src_path)
+                    .to_string_lossy()
+                    .to_string();
+
+                Some(TestUnit {
+                    executable,
+                    rel_path,
+                    name: src_path,
+                })
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if !output.status.success() {
+        shell.error("Failed to build test binary")?;
+        std::process::exit(output.status.code().unwrap_or(1));
     }
 
-    test_cmd.current_dir(&working_dir);
+    if test_binary_paths.is_empty() {
+        shell.error("No test binary found in the build output")?;
+        std::process::exit(1);
+    }
 
-    shell.verbose(|shell| {
-        shell.status_with_color(
+    let mut failed = false;
+
+    for test_binary_path in test_binary_paths {
+        // Push binary to device
+        let device_path = format!(
+            "/data/local/tmp/{}",
+            test_binary_path
+                .executable
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+        );
+
+        // Ugly but works
+        shell.verbose(|shell| {
+            shell.status_header("Pushing")?;
+            shell.reset_err()?;
+            shell
+                .err()
+                .write_fmt(format_args!("test binary to device: {}\r", device_path))?;
+            shell.set_needs_clear(true);
+            Ok(())
+        })?;
+
+        let push_status = Command::new(&adb_path)
+            .with_serial(args.adb_serial.as_deref())
+            .arg("push")
+            .arg(&test_binary_path.executable)
+            .arg(&device_path)
+            .output()?;
+
+        if !push_status.status.success() {
+            shell.error("Failed to push test binary to device")?;
+            eprintln!("{}", std::str::from_utf8(&push_status.stderr)?.trim());
+            shell.note("If multiple devices, use --adb-serial to specify one.")?;
+            shell.note("Run `adb devices` to see connected devices.")?;
+            std::process::exit(push_status.status.code().unwrap_or(1));
+        }
+
+        shell.verbose(|shell| {
+            shell.status(
+                "Pushing",
+                format!("test binary to device ({})", device_path),
+            )
+        })?;
+
+        // Make binary executable
+        let chmod_status = Command::new(&adb_path)
+            .with_serial(args.adb_serial.as_deref())
+            .arg("shell")
+            .arg("chmod")
+            .arg("755")
+            .arg(&device_path)
+            .status()?;
+
+        if !chmod_status.success() {
+            shell.error("Failed to make test binary executable")?;
+            std::process::exit(chmod_status.code().unwrap_or(1));
+        }
+
+        // Run the test binary on device
+        shell.status(
             "Running",
             format!(
-                "cargo test --no-run --target {} --target-dir {}",
-                triple,
-                temp_target_dir.display()
+                "unittests {} ({})",
+                test_binary_path.name, test_binary_path.rel_path
             ),
-            termcolor::Color::Cyan,
-        )
-    })?;
+        )?;
+        shell.reset_err()?;
 
-    let status = test_cmd.status()?;
-    if !status.success() {
-        shell.error("Failed to build test binary")?;
-        std::process::exit(status.code().unwrap_or(1));
-    }
+        let verbosity_arg = match verbosity {
+            Verbosity::Quiet => "-q",
+            _ => "",
+        };
 
-    // Find the test binary
-    let test_binary_path = find_test_binary(&temp_target_dir, &triple, &mut shell)?;
+        let run_status = Command::new(&adb_path)
+            .with_serial(args.adb_serial.as_deref())
+            .arg("shell")
+            .arg(&device_path)
+            .arg(verbosity_arg)
+            .args(&args.test_args)
+            .status()?;
 
-    shell.verbose(|shell| {
-        shell.status_with_color(
-            "Found",
-            format!("test binary: {}", test_binary_path.display()),
-            termcolor::Color::Cyan,
-        )
-    })?;
+        // Clean up the binary from device
+        let _ = Command::new(&adb_path)
+            .with_serial(args.adb_serial.as_deref())
+            .arg("shell")
+            .arg("rm")
+            .arg(&device_path)
+            .status();
 
-    // Push binary to device
-    let device_path = format!(
-        "/data/local/tmp/{}",
-        test_binary_path.file_name().unwrap().to_string_lossy()
-    );
-
-    shell.status("Pushing", format!("test binary to device: {}", device_path))?;
-
-    let push_status = Command::new(&adb_path)
-        .arg("push")
-        .arg(&test_binary_path)
-        .arg(&device_path)
-        .status()?;
-
-    if !push_status.success() {
-        shell.error("Failed to push test binary to device")?;
-        std::process::exit(push_status.code().unwrap_or(1));
-    }
-
-    // Make binary executable
-    let chmod_status = Command::new(&adb_path)
-        .arg("shell")
-        .arg("chmod")
-        .arg("755")
-        .arg(&device_path)
-        .status()?;
-
-    if !chmod_status.success() {
-        shell.error("Failed to make test binary executable")?;
-        std::process::exit(chmod_status.code().unwrap_or(1));
-    }
-
-    // Run the test binary on device
-    shell.status("Running", "tests on device")?;
-
-    let run_status = Command::new(&adb_path)
-        .arg("shell")
-        .arg(&device_path)
-        .status()?;
-
-    // Clean up the binary from device
-    let _ = Command::new(&adb_path)
-        .arg("shell")
-        .arg("rm")
-        .arg(&device_path)
-        .status();
-
-    if !run_status.success() {
-        shell.error("Tests failed on device")?;
-        std::process::exit(run_status.code().unwrap_or(1));
-    }
-
-    shell.status("Finished", "tests passed on device")?;
-    Ok(())
-}
-
-fn find_test_binary(target_dir: &Path, triple: &str, shell: &mut Shell) -> anyhow::Result<PathBuf> {
-    let deps_dir = target_dir.join(triple).join("debug").join("deps");
-
-    if !deps_dir.exists() {
-        return Err(anyhow::anyhow!(
-            "Test build directory not found: {}",
-            deps_dir.display()
-        ));
-    }
-
-    // Look for test executables in the deps directory
-    for entry in fs::read_dir(&deps_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file() {
-            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                // Test binaries typically have names ending with a hash
-                if file_name.contains('-')
-                    && !file_name.ends_with(".d")
-                    && !file_name.ends_with(".so")
-                {
-                    // Check if it's executable by trying to read it
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            if metadata.permissions().mode() & 0o111 != 0 {
-                                shell.very_verbose(|shell| {
-                                    shell.status(
-                                        "Found",
-                                        format!("potential test binary: {}", path.display()),
-                                    )
-                                })?;
-                                return Ok(path);
-                            }
-                        }
-                        #[cfg(not(unix))]
-                        {
-                            // On non-Unix systems, just check if it's not a library
-                            if !file_name.contains(".")
-                                || (!file_name.ends_with(".dll") && !file_name.ends_with(".lib"))
-                            {
-                                shell.very_verbose(|shell| {
-                                    shell.status(
-                                        "Found",
-                                        format!("potential test binary: {}", path.display()),
-                                    )
-                                })?;
-                                return Ok(path);
-                            }
-                        }
-                    }
-                }
-            }
+        if !run_status.success() {
+            failed = true;
         }
     }
 
-    Err(anyhow::anyhow!(
-        "No test binary found in {}",
-        deps_dir.display()
-    ))
+    shell.note("No doctests can currently be run on Android devices. Please run them on your host machine.")?;
+
+    std::process::exit(if failed { 1 } else { 0 });
 }
 
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).

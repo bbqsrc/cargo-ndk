@@ -1,4 +1,9 @@
 #[no_mangle]
-extern "C" fn example() {
+pub extern "C" fn example() {
     println!("Hello Android!");
+}
+
+#[test]
+fn test_example() {
+    example();
 }

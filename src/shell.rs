@@ -14,20 +14,6 @@ pub enum TtyWidth {
 }
 
 impl TtyWidth {
-    /// Returns the width of the terminal to use for diagnostics (which is
-    /// relayed to rustc via `--diagnostic-width`).
-    pub fn diagnostic_terminal_width(&self) -> Option<usize> {
-        // ALLOWED: For testing cargo itself only.
-        #[allow(clippy::disallowed_methods)]
-        if let Ok(width) = std::env::var("__CARGO_TEST_TTY_WIDTH_DO_NOT_USE_THIS") {
-            return Some(width.parse().unwrap());
-        }
-        match *self {
-            TtyWidth::NoTty | TtyWidth::Guess(_) => None,
-            TtyWidth::Known(width) => Some(width),
-        }
-    }
-
     /// Returns the width used by progress bars for the tty.
     pub fn progress_max_width(&self) -> Option<usize> {
         match *self {
@@ -188,6 +174,18 @@ impl Shell {
             self.err_erase_line();
         }
         self.output.stderr()
+    }
+
+    pub fn reset_err(&mut self) -> anyhow::Result<()> {
+        match self.output {
+            ShellOut::Stream { ref mut stderr, .. } => {
+                stderr.reset()?;
+            }
+            ShellOut::Write(_) => {
+                // No-op for non-color streams
+            }
+        }
+        Ok(())
     }
 
     /// Erase from cursor to end of line.
@@ -447,7 +445,7 @@ impl ShellOut {
                                 .set_intense(true)
                                 .set_fg(Some(Color::Black)),
                         )?;
-                        write!(stderr, "")?;
+                        write!(stderr, " ")?;
                     }
                 }
             }
