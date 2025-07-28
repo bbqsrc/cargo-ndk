@@ -96,7 +96,7 @@ pub(crate) fn build_env(
     clang_target: &str,
     link_builtins: bool,
 ) -> BTreeMap<String, OsString> {
-    let self_path = std::fs::canonicalize(env::args().next().unwrap())
+    let self_path = dunce::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
         .parent()
         .unwrap()
