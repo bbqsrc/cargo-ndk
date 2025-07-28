@@ -32,6 +32,17 @@ pub enum Verbosity {
     Quiet,
 }
 
+impl From<u8> for Verbosity {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Verbosity::Quiet,
+            1 => Verbosity::Normal,
+            2 => Verbosity::Verbose,
+            _ => Verbosity::VeryVerbose,
+        }
+    }
+}
+
 /// An abstraction around console output that remembers preferences for output
 /// verbosity and color.
 pub struct Shell {

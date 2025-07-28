@@ -96,11 +96,16 @@ pub(crate) fn build_env(
     clang_target: &str,
     link_builtins: bool,
 ) -> BTreeMap<String, OsString> {
-    let self_path = dunce::canonicalize(env::args().next().unwrap())
+    let cargo_ndk_path = dunce::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
         .parent()
         .unwrap()
         .join("cargo-ndk");
+    let cargo_ndk_runner_path = dunce::canonicalize(env::args().next().unwrap())
+        .expect("Failed to canonicalize absolute path to cargo-ndk-runner")
+        .parent()
+        .unwrap()
+        .join("cargo-ndk-runner");
 
     // Environment variables for the `cc` crate
     let (cc_key, _) = cc_env("CC", triple);
@@ -113,6 +118,7 @@ pub(crate) fn build_env(
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
+    let cargo_runner_key = cargo_env_target_cfg(triple, "runner");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
 
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
@@ -133,7 +139,6 @@ pub(crate) fn build_env(
         .join(cargo_ndk_sysroot_target);
     let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
     let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
-    let target_linker = self_path;
 
     let extra_include = format!(
         "{}/usr/include/{}",
@@ -149,7 +154,8 @@ pub(crate) fn build_env(
         (ar_key, target_ar.clone().into()),
         (ranlib_key, target_ranlib.into_os_string()),
         (cargo_ar_key, target_ar.into_os_string()),
-        (cargo_linker_key, target_linker.into_os_string()),
+        (cargo_linker_key, cargo_ndk_path.into_os_string()),
+        (cargo_runner_key, cargo_ndk_runner_path.into_os_string()),
         (
             CARGO_NDK_SYSROOT_PATH_KEY.to_string(),
             cargo_ndk_sysroot_path.clone().into_os_string(),

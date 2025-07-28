@@ -2,7 +2,7 @@
 name = "example"
 version = "0.1.0"
 authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
-edition = "2018"
+edition = "2024"
 
 [lib]
 # This must contain at least cdylib for Android libraries to be generated.

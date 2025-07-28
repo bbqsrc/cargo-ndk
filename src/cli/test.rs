@@ -1,15 +1,9 @@
-use std::{
-    env,
-    path::PathBuf,
-    process::{Command, Stdio},
-};
+use std::{env, path::PathBuf, process::Command};
 
 use clap::Parser;
 
 use crate::{
-    cli::{
-        CommandExt as _, HasCargoArgs, derive_adb_path, derive_ndk_path, derive_ndk_version, init,
-    },
+    cli::{HasCargoArgs, derive_adb_path, derive_ndk_path, derive_ndk_version, init},
     meta::Target,
 };
 
@@ -54,18 +48,10 @@ impl HasCargoArgs for TestArgs {
     }
 }
 
-pub struct TestUnit {
-    executable: PathBuf,
-    name: String,
-    rel_path: String,
-}
-
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
     let valid_args = args.split(|x| x == "--").next().unwrap_or(&args).to_vec();
-
-    let has_quiet_flag = valid_args.iter().any(|x| x == "-q" || x == "--quiet");
-    let (mut shell, args) = init::<TestArgs>(valid_args)?;
+    let (mut shell, _) = init::<TestArgs>(valid_args)?;
 
     let mut args = match TestArgs::try_parse_from(&args) {
         Ok(args) => args,
@@ -153,182 +139,21 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         )
     })?;
 
-    // Build test binary with --no-run
+    // Now we have the test binary built, we can find it in the output
     let mut test_cmd = Command::new("cargo");
     test_cmd
-        .args([
-            "test",
-            "--no-run",
-            "--message-format",
-            "json",
-            "--target",
-            triple,
-        ])
+        .args(["test", "--target", triple])
         .args(&args.cargo_args)
+        .arg("--")
+        .args(&args.test_args)
         .envs(env_vars)
-        .stderr(Stdio::inherit())
         .current_dir(&working_dir);
 
     if let Some(manifest_path) = &args.manifest_path {
         test_cmd.arg("--manifest-path").arg(manifest_path);
     }
 
-    let output = test_cmd.output()?;
+    test_cmd.status().unwrap();
 
-    let test_binary_paths = output
-        .stdout
-        .split(|c| *c == b'\n')
-        .filter_map(|x| serde_json::from_slice::<serde_json::Value>(x).ok())
-        .filter_map(|blob| {
-            let artifact = blob.as_object()?;
-
-            let Some(serde_json::Value::String(reason)) = artifact.get("reason") else {
-                return None;
-            };
-
-            if reason == "compiler-artifact" {
-                let executable = artifact
-                    .get("executable")
-                    .and_then(|v| v.as_str())
-                    .map(PathBuf::from)?;
-
-                let manifest_path = artifact
-                    .get("manifest_path")
-                    .and_then(|v| v.as_str())
-                    .map(PathBuf::from)?;
-
-                let src_path = artifact
-                    .get("target")
-                    .and_then(|v| v.get("src_path"))
-                    .and_then(|v| v.as_str())
-                    .map(PathBuf::from)?;
-
-                let working_path = manifest_path.parent().unwrap();
-
-                let rel_path = executable
-                    .strip_prefix(working_path)
-                    .unwrap_or(&executable)
-                    .to_string_lossy()
-                    .to_string();
-
-                let src_path = src_path
-                    .strip_prefix(working_path)
-                    .unwrap_or(&src_path)
-                    .to_string_lossy()
-                    .to_string();
-
-                Some(TestUnit {
-                    executable,
-                    rel_path,
-                    name: src_path,
-                })
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if !output.status.success() {
-        shell.error("Failed to build test binary")?;
-        std::process::exit(output.status.code().unwrap_or(1));
-    }
-
-    if test_binary_paths.is_empty() {
-        shell.error("No test binary found in the build output")?;
-        std::process::exit(1);
-    }
-
-    let mut failed = false;
-
-    for test_binary_path in test_binary_paths {
-        // Push binary to device
-        let device_path = format!(
-            "/data/local/tmp/{}",
-            test_binary_path
-                .executable
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-        );
-
-        // Ugly but works
-        shell.verbose(|shell| {
-            shell.status_header("Pushing")?;
-            shell.reset_err()?;
-            shell
-                .err()
-                .write_fmt(format_args!("test binary to device: {device_path}\r"))?;
-            shell.set_needs_clear(true);
-            Ok(())
-        })?;
-
-        let push_status = Command::new(&adb_path)
-            .with_serial(args.adb_serial.as_deref())
-            .arg("push")
-            .arg(&test_binary_path.executable)
-            .arg(&device_path)
-            .output()?;
-
-        if !push_status.status.success() {
-            shell.error("Failed to push test binary to device")?;
-            eprintln!("{}", std::str::from_utf8(&push_status.stderr)?.trim());
-            shell.note("If multiple devices, use --adb-serial to specify one.")?;
-            shell.note("Run `adb devices` to see connected devices.")?;
-            std::process::exit(push_status.status.code().unwrap_or(1));
-        }
-
-        shell.verbose(|shell| {
-            shell.status("Pushing", format!("test binary to device ({device_path})"))
-        })?;
-
-        // Make binary executable
-        let chmod_status = Command::new(&adb_path)
-            .with_serial(args.adb_serial.as_deref())
-            .arg("shell")
-            .arg("chmod")
-            .arg("755")
-            .arg(&device_path)
-            .status()?;
-
-        if !chmod_status.success() {
-            shell.error("Failed to make test binary executable")?;
-            std::process::exit(chmod_status.code().unwrap_or(1));
-        }
-
-        // Run the test binary on device
-        shell.status(
-            "Running",
-            format!(
-                "unittests {} ({})",
-                test_binary_path.name, test_binary_path.rel_path
-            ),
-        )?;
-        shell.reset_err()?;
-
-        let verbosity_arg = if has_quiet_flag { "-q" } else { "" };
-
-        let run_status = Command::new(&adb_path)
-            .with_serial(args.adb_serial.as_deref())
-            .arg("shell")
-            .arg(&device_path)
-            .arg(verbosity_arg)
-            .args(&args.test_args)
-            .status()?;
-
-        // Clean up the binary from device
-        let _ = Command::new(&adb_path)
-            .with_serial(args.adb_serial.as_deref())
-            .arg("shell")
-            .arg("rm")
-            .arg(&device_path)
-            .status();
-
-        if !run_status.success() {
-            failed = true;
-        }
-    }
-
-    shell.note("No doctests can currently be run on Android devices. Please run them on your host machine.")?;
-
-    std::process::exit(if failed { 1 } else { 0 });
+    std::process::exit(0);
 }

@@ -1,4 +1,10 @@
-#[no_mangle]
+/// A simple function to demonstrate a basic Rust library for Android.
+///
+/// ```
+/// use example::example;
+/// example();
+/// ```
+#[unsafe(no_mangle)]
 pub extern "C" fn example() {
     println!("Hello Android!");
 }
