@@ -2,7 +2,6 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::OsString,
-    fmt::Display,
     fs, io,
     panic::PanicHookInfo,
     path::{Path, PathBuf},
@@ -12,7 +11,7 @@ use std::{
 
 use anyhow::Context;
 use cargo_metadata::{Artifact, CrateType, MetadataCommand, camino::Utf8Path, semver::Version};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use filetime::FileTime;
 
 use crate::{
@@ -35,12 +34,12 @@ impl CommandExt for Command {
 }
 
 #[derive(Debug, Parser)]
-struct ArgsEnv {
-    /// triples for the target. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+struct EnvArgs {
+    /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET")]
     target: Target,
 
-    /// platform (also known as API level)
+    /// Platform (also known as API level)
     #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
@@ -48,22 +47,22 @@ struct ArgsEnv {
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
 
-    /// use PowerShell syntax
+    /// Use PowerShell syntax
     #[arg(long)]
     powershell: bool,
 
-    /// print output in JSON format
+    /// Print output in JSON format
     #[arg(long)]
     json: bool,
 }
 
 #[derive(Debug, Parser, Clone)]
 struct BuildArgs {
-    /// triples for the target(s). Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET", value_delimiter = ',')]
     target: Vec<Target>,
 
-    /// platform (also known as API level)
+    /// Platform (also known as API level)
     #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
@@ -71,26 +70,26 @@ struct BuildArgs {
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
 
-    /// output to a jniLibs directory in the correct sub-directories
+    /// Output to a `jniLibs` directory in the correct sub-directories
     #[arg(short, long, value_name = "DIR", env = "CARGO_NDK_OUTPUT_DIR")]
     output_dir: Option<PathBuf>,
 
-    /// path to Cargo.toml
+    /// Path to Cargo.toml
     #[arg(long, value_name = "PATH")]
     manifest_path: Option<PathBuf>,
 
-    /// args to be passed to cargo
+    /// Args to be passed to cargo
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     cargo_args: Vec<String>,
 }
 
 #[derive(Debug, Parser, Clone)]
 struct TestArgs {
-    /// Android target to test on. Additionally, Android target names are supported: armeabi-v7a arm64-v8a x86 x86_64
+    /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET")]
     target: Target,
 
-    /// platform (also known as API level)
+    /// Platform (also known as API level)
     #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
@@ -98,24 +97,24 @@ struct TestArgs {
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
 
-    /// path to Cargo.toml
+    /// Path to Cargo.toml
     #[arg(long, value_name = "PATH")]
     manifest_path: Option<PathBuf>,
 
     #[arg(long, env = "CARGO_NDK_ADB_SERIAL")]
-    /// serial number of the device to use for testing (e.g. "emulator-5554" or "0123456789ABCDEF")
+    /// "Serial number" of the device to use for testing (e.g. "emulator-5554" or "0123456789ABCDEF")
     ///
     /// You can find the serial number of your device by running `adb devices`.
     ///
     /// If not set, the first available device will be used.
     adb_serial: Option<String>,
 
-    /// arguments to be passed to cargo test
+    /// Arguments to be passed to cargo test
     #[arg(allow_hyphen_values = true)]
     cargo_args: Vec<String>,
 
     #[arg(last = true)]
-    /// additional arguments to pass to the test binary on device
+    /// Additional arguments to pass to the test binary on device
     test_args: Vec<String>,
 }
 
@@ -331,12 +330,17 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
 
 pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        use clap::CommandFactory;
-        ArgsEnv::command().print_help().unwrap();
+    if args.contains(&"--help".to_string()) {
+        EnvArgs::command().print_long_help().unwrap();
         std::process::exit(0);
     }
-    if args.contains(&"--version".to_string()) {
+
+    if args.contains(&"-h".to_string()) {
+        EnvArgs::command().print_help().unwrap();
+        std::process::exit(0);
+    }
+
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
@@ -361,7 +365,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
     shell.set_verbosity(verbosity);
     shell.set_color_choice(color)?;
 
-    let args = match ArgsEnv::try_parse_from(&args) {
+    let args = match EnvArgs::try_parse_from(&args) {
         Ok(args) => args,
         Err(e) => {
             shell.error(e)?;
@@ -514,12 +518,17 @@ impl HasCargoArgs for BuildArgs {
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    if args.is_empty() || args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        use clap::CommandFactory;
+    if args.contains(&"--help".to_string()) {
+        BuildArgs::command().print_long_help().unwrap();
+        std::process::exit(0);
+    }
+
+    if args.contains(&"-h".to_string()) {
         BuildArgs::command().print_help().unwrap();
         std::process::exit(0);
     }
-    if args.contains(&"--version".to_string()) {
+
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
@@ -902,15 +911,17 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
     let valid_args = args.split(|x| x == "--").next().unwrap_or(&args);
 
-    if valid_args.is_empty()
-        || valid_args.contains(&"--help".to_string())
-        || valid_args.contains(&"-h".to_string())
-    {
-        use clap::CommandFactory;
+    if valid_args.contains(&"--help".to_string()) {
+        TestArgs::command().print_long_help().unwrap();
+        std::process::exit(0);
+    }
+
+    if valid_args.contains(&"-h".to_string()) {
         TestArgs::command().print_help().unwrap();
         std::process::exit(0);
     }
-    if valid_args.contains(&"--version".to_string()) {
+
+    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }

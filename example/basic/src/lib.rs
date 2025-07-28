@@ -7,3 +7,8 @@ pub extern "C" fn example() {
 fn test_example() {
     example();
 }
+
+#[test]
+fn failing_test() {
+    assert_eq!(1, 2, "This test is supposed to fail");
+}
