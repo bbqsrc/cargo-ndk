@@ -3,8 +3,7 @@ use std::{
     env,
     ffi::OsString,
     fmt::Display,
-    fs,
-    io::{self, ErrorKind},
+    fs, io,
     panic::PanicHookInfo,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -155,8 +154,7 @@ fn find_first_consistent_var_set<'a>(
                 if *first_path != path {
                     shell
                         .warn(format!(
-                            "Environment variable `{} = {:#?}` doesn't match `{} = {:#?}`",
-                            first_var, first_path, var, path
+                            "Environment variable `{first_var} = {first_path:#?}` doesn't match `{var} = {path:#?}`"
                         ))
                         .unwrap();
                 }
@@ -263,12 +261,8 @@ fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
     for line in data.split('\n') {
         if line.starts_with("Pkg.Revision") {
             let mut chunks = line.split(" = ");
-            let _ = chunks
-                .next()
-                .ok_or_else(|| io::Error::new(ErrorKind::Other, "No chunk"))?;
-            let version = chunks
-                .next()
-                .ok_or_else(|| io::Error::new(ErrorKind::Other, "No chunk"))?;
+            let _ = chunks.next().ok_or_else(|| io::Error::other("No chunk"))?;
+            let version = chunks.next().ok_or_else(|| io::Error::other("No chunk"))?;
             let version = match Version::parse(version) {
                 Ok(v) => v,
                 Err(_e) => {
@@ -321,7 +315,7 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
         let mut shell = Shell::new();
         shell.error("cargo-ndk panicked! Generating report...")?;
         for line in lines {
-            println!("{}", line);
+            println!("{line}");
         }
         shell.error("end of panic report. Please report the above to: <https://github.com/bbqsrc/cargo-ndk/issues>")?;
         Ok(())
@@ -337,7 +331,7 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
     };
 
     let env = std::env::vars()
-        .map(|(x, y)| format!("{}={:?}", x, y))
+        .map(|(x, y)| format!("{x}={y:?}"))
         .collect::<Vec<_>>();
     let args = std::env::args().collect::<Vec<_>>();
 
@@ -357,7 +351,7 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
     if _attempt_shell(&lines).is_err() {
         // Last ditch attempt
         for line in lines {
-            eprintln!("{}", line);
+            eprintln!("{line}");
         }
     }
 }
@@ -438,7 +432,7 @@ pub fn run_env(args: Vec<String>) -> anyhow::Result<()> {
         );
     } else if args.powershell {
         for (k, v) in env {
-            println!("${{env:{}}}={:?}", k, v);
+            println!("${{env:{k}}}={v:?}");
         }
         println!();
         println!("# To import with PowerShell:");
@@ -479,7 +473,7 @@ where
         }
 
         if let Some(long) = arg.get_long() {
-            let long_flag = format!("--{}", long);
+            let long_flag = format!("--{long}");
             global_flags.push(long_flag.clone());
 
             // Check if this flag takes a value (not a boolean flag)
@@ -488,7 +482,7 @@ where
             }
         }
         if let Some(short) = arg.get_short() {
-            let short_flag = format!("-{}", short);
+            let short_flag = format!("-{short}");
             global_flags.push(short_flag.clone());
 
             // Check if this flag takes a value (not a boolean flag)
@@ -747,7 +741,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.verbose(|shell| {
         shell.status_with_color(
             "Setting",
-            format!("Android SDK platform level to {}", platform),
+            format!("Android SDK platform level to {platform}"),
             termcolor::Color::Cyan,
         )
     })?;
@@ -793,7 +787,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             shell.very_verbose(|shell| {
                 shell.status_with_color(
                     "Exporting",
-                    format!("ANDROID_PLATFORM={}", platform),
+                    format!("ANDROID_PLATFORM={platform}"),
                     termcolor::Color::Cyan,
                 )
             })?;
@@ -832,7 +826,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     "If the build failed due to a missing target, you can run this command:",
                 )?;
                 shell.note("")?;
-                shell.note(format!("    rustup target install {}", triple))?;
+                shell.note(format!("    rustup target install {triple}"))?;
                 std::process::exit(code);
             }
 
@@ -1176,7 +1170,7 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
             shell.reset_err()?;
             shell
                 .err()
-                .write_fmt(format_args!("test binary to device: {}\r", device_path))?;
+                .write_fmt(format_args!("test binary to device: {device_path}\r"))?;
             shell.set_needs_clear(true);
             Ok(())
         })?;
@@ -1197,10 +1191,7 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
         }
 
         shell.verbose(|shell| {
-            shell.status(
-                "Pushing",
-                format!("test binary to device ({})", device_path),
-            )
+            shell.status("Pushing", format!("test binary to device ({device_path})"))
         })?;
 
         // Make binary executable
@@ -1260,11 +1251,7 @@ pub fn run_test(args: Vec<String>) -> anyhow::Result<()> {
 
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
 fn artifact_is_cdylib(artifact: &Artifact) -> bool {
-    artifact
-        .target
-        .crate_types
-        .iter()
-        .any(|ty| *ty == CrateType::CDyLib)
+    artifact.target.crate_types.contains(&CrateType::CDyLib)
 }
 
 // Check if the source file has changed and should be copied over to the destination path.

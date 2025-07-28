@@ -25,13 +25,13 @@ fn clang_linker_wrapper() -> ! {
     cmd.arg(target);
 
     if let Ok(builtins_path) = std::env::var("_CARGO_NDK_LINK_BUILTINS") {
-        cmd.arg(format!("-L{}", builtins_path));
+        cmd.arg(format!("-L{builtins_path}"));
 
         // Extract arch from target triple (e.g., "aarch64-linux-android21" -> "aarch64")
         let arch = std::env::var("CARGO_NDK_SYSROOT_TARGET")
             .expect("cargo-ndk rustc linker: didn't find CARGO_NDK_SYSROOT_TARGET");
         let arch = arch.split('-').next().unwrap();
-        cmd.arg(format!("-lclang_rt.builtins-{}-android", arch));
+        cmd.arg(format!("-lclang_rt.builtins-{arch}-android"));
     }
 
     let mut child = cmd.args(args).spawn().unwrap_or_else(|err| {

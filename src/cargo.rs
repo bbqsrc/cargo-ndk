@@ -76,11 +76,11 @@ fn env_var_with_key(key: String) -> Option<(String, String)> {
 // Derived from getenv_with_target_prefixes in `cc` crate.
 fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
     let triple_u = triple.replace('-', "_");
-    let most_specific_key = format!("{}_{}", var_base, triple);
+    let most_specific_key = format!("{var_base}_{triple}");
 
     env_var_with_key(most_specific_key.to_string())
-        .or_else(|| env_var_with_key(format!("{}_{}", var_base, triple_u)))
-        .or_else(|| env_var_with_key(format!("TARGET_{}", var_base)))
+        .or_else(|| env_var_with_key(format!("{var_base}_{triple_u}")))
+        .or_else(|| env_var_with_key(format!("TARGET_{var_base}")))
         .or_else(|| env_var_with_key(var_base.to_string()))
         .map(|(key, value)| (key, Some(value)))
         .unwrap_or_else(|| (most_specific_key, None))
