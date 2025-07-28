@@ -279,33 +279,6 @@ fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
     Err(anyhow::anyhow!("Could not find Pkg.Revision in given path"))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum BuildMode {
-    Debug,
-    Release,
-    Profile(String),
-}
-
-impl Display for BuildMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            BuildMode::Debug => "debug",
-            BuildMode::Release => "release",
-            BuildMode::Profile(x) => x,
-        })
-    }
-}
-
-impl From<&str> for BuildMode {
-    fn from(profile: &str) -> Self {
-        match profile {
-            "dev" => BuildMode::Debug,
-            "release" => BuildMode::Release,
-            _ => BuildMode::Profile(profile.to_string()),
-        }
-    }
-}
-
 fn is_supported_rustc_version() -> bool {
     version_check::is_min_version("1.68.0").unwrap_or_default()
 }
