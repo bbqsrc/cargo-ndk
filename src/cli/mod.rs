@@ -273,8 +273,7 @@ fn panic_hook(info: &PanicHookInfo<'_>) {
 /// Parse arguments that can appear both before and after the cargo subcommand
 fn parse_mixed_args<T>(args: Vec<String>) -> anyhow::Result<T>
 where
-    T: clap::Parser + Clone + clap::CommandFactory,
-    T: HasCargoArgs,
+    T: clap::Parser + Clone + clap::CommandFactory + HasCargoArgs,
 {
     let mut global_args = vec!["cargo-ndk".to_string()];
     let mut cargo_args = Vec::new();
@@ -360,28 +359,41 @@ impl HasCargoArgs for BuildArgs {
     }
 }
 
-pub fn run(args: Vec<String>) -> anyhow::Result<()> {
-    // Check for help/version before parsing to avoid required arg errors
-    if args.contains(&"--help".to_string()) {
+trait StringVecExt {
+    fn contains_str(&self, value: &str) -> bool;
+}
+
+impl StringVecExt for Vec<String> {
+    fn contains_str(&self, value: &str) -> bool {
+        self.iter().any(|s| s == value)
+    }
+}
+
+pub(self) fn init<T: Parser + Clone>(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
+    if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
+        std::panic::set_hook(Box::new(panic_hook));
+    }
+
+    if args.contains_str("--help") {
         BuildArgs::command().print_long_help().unwrap();
         std::process::exit(0);
     }
 
-    if args.contains(&"-h".to_string()) {
+    if args.contains_str("-h") {
         BuildArgs::command().print_help().unwrap();
         std::process::exit(0);
     }
 
-    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
+    if args.contains_str("--version") || args.contains_str("-V") {
         println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
         std::process::exit(0);
     }
 
-    let verbosity = if args.contains(&"-q".into()) {
+    let verbosity = if args.contains_str("-q") {
         Verbosity::Quiet
-    } else if args.contains(&"-vv".into()) {
+    } else if args.contains_str("-vv") {
         Verbosity::VeryVerbose
-    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
+    } else if args.contains_str("-v") || args.contains_str("--verbose") {
         Verbosity::Verbose
     } else {
         Verbosity::Normal
@@ -397,14 +409,10 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.set_verbosity(verbosity);
     shell.set_color_choice(color)?;
 
-    if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
-        std::panic::set_hook(Box::new(panic_hook));
-    }
-
     shell.verbose(|shell| {
         shell.status_with_color(
             "Using",
-            format!("cargo-ndk v{}", env!("CARGO_PKG_VERSION"),),
+            format!("cargo-ndk v{}", env!("CARGO_PKG_VERSION")),
             termcolor::Color::Cyan,
         )
     })?;
@@ -414,6 +422,13 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         shell.note("Upgrade Rust to at least v1.68.0.")?;
         std::process::exit(1);
     }
+
+    Ok((shell, args))
+}
+
+pub fn run(args: Vec<String>) -> anyhow::Result<()> {
+    // Check for help/version before parsing to avoid required arg errors
+    let (mut shell, args) = init::<BuildArgs>(args)?;
 
     let args = match parse_mixed_args::<BuildArgs>(args) {
         Ok(args) => args,
@@ -575,6 +590,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     unsafe {
         std::env::set_var("CARGO_NDK_ANDROID_PLATFORM", platform.to_string());
     }
+
     shell.verbose(|shell| {
         shell.status_with_color(
             "Building",
@@ -746,11 +762,13 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 }
 
 /// Check whether the produced artifact is of use to use (has to be of type `cdylib`).
+#[inline]
 fn artifact_is_cdylib(artifact: &Artifact) -> bool {
     artifact.target.crate_types.contains(&CrateType::CDyLib)
 }
 
-// Check if the source file has changed and should be copied over to the destination path.
+/// Check if the source file has changed and should be copied over to the destination path.
+#[inline]
 fn is_fresh(src: &Utf8Path, dest: &Path) -> anyhow::Result<bool> {
     if !dest.exists() {
         return Ok(false);

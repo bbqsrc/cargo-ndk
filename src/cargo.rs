@@ -10,31 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use cargo_metadata::{Artifact, Message, semver::Version};
 
-use crate::shell::Shell;
-
-#[cfg(target_os = "macos")]
-const ARCH: &str = "darwin-x86_64";
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const ARCH: &str = "linux-x86_64";
-#[cfg(target_os = "windows")]
-const ARCH: &str = "windows-x86_64";
-
-#[cfg(all(target_os = "android", not(cargo_ndk_on_android)))]
-compile_error!(
-    r#"
-Building cargo-ndk on Android is not supported. This binary is intended to be run on your host OS.
-
-Set CARGO_NDK_ON_ANDROID to override this check (for example, building for Termux)."
-"#
-);
-
-#[cfg(not(any(
-    target_os = "android",
-    target_os = "macos",
-    target_os = "linux",
-    target_os = "windows"
-)))]
-compile_error!("Unsupported target OS");
+use crate::{ARCH, shell::Shell};
 
 pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
     let target = match rust_target {
@@ -86,8 +62,8 @@ fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
         .unwrap_or_else(|| (most_specific_key, None))
 }
 
-#[inline]
 // {}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux
+#[inline]
 fn clang_lib_path(ndk_home: &Path) -> PathBuf {
     let clang_folder: PathBuf = ndk_home
         .join("toolchains")
@@ -110,6 +86,10 @@ fn clang_lib_path(ndk_home: &Path) -> PathBuf {
         .join("linux")
 }
 
+const CARGO_NDK_SYSROOT_PATH_KEY: &'static str = "CARGO_NDK_SYSROOT_PATH";
+const CARGO_NDK_SYSROOT_TARGET_KEY: &'static str = "CARGO_NDK_SYSROOT_TARGET";
+const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &'static str = "CARGO_NDK_SYSROOT_LIBS_PATH";
+
 pub(crate) fn build_env(
     triple: &str,
     ndk_home: &Path,
@@ -123,12 +103,12 @@ pub(crate) fn build_env(
         .join("cargo-ndk");
 
     // Environment variables for the `cc` crate
-    let (cc_key, _cc_value) = cc_env("CC", triple);
+    let (cc_key, _) = cc_env("CC", triple);
     let (cflags_key, cflags_value) = cc_env("CFLAGS", triple);
-    let (cxx_key, _cxx_value) = cc_env("CXX", triple);
+    let (cxx_key, _) = cc_env("CXX", triple);
     let (cxxflags_key, cxxflags_value) = cc_env("CXXFLAGS", triple);
-    let (ar_key, _ar_value) = cc_env("AR", triple);
-    let (ranlib_key, _ranlib_value) = cc_env("RANLIB", triple);
+    let (ar_key, _) = cc_env("AR", triple);
+    let (ranlib_key, _) = cc_env("RANLIB", triple);
 
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
@@ -145,11 +125,8 @@ pub(crate) fn build_env(
         Some(v) => format!("{clang_target} {v}"),
         None => clang_target.to_string(),
     };
-    let cargo_ndk_sysroot_path_key = "CARGO_NDK_SYSROOT_PATH";
     let cargo_ndk_sysroot_path = ndk_home.join(sysroot_suffix(ARCH));
-    let cargo_ndk_sysroot_target_key = "CARGO_NDK_SYSROOT_TARGET";
     let cargo_ndk_sysroot_target = sysroot_target(triple);
-    let cargo_ndk_sysroot_libs_path_key = "CARGO_NDK_SYSROOT_LIBS_PATH";
     let cargo_ndk_sysroot_libs_path = cargo_ndk_sysroot_path
         .join("usr")
         .join("lib")
@@ -174,15 +151,15 @@ pub(crate) fn build_env(
         (cargo_ar_key, target_ar.into_os_string()),
         (cargo_linker_key, target_linker.into_os_string()),
         (
-            cargo_ndk_sysroot_path_key.to_string(),
+            CARGO_NDK_SYSROOT_PATH_KEY.to_string(),
             cargo_ndk_sysroot_path.clone().into_os_string(),
         ),
         (
-            cargo_ndk_sysroot_libs_path_key.to_string(),
+            CARGO_NDK_SYSROOT_LIBS_PATH_KEY.to_string(),
             cargo_ndk_sysroot_libs_path.into_os_string(),
         ),
         (
-            cargo_ndk_sysroot_target_key.to_string(),
+            CARGO_NDK_SYSROOT_TARGET_KEY.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables

@@ -4,15 +4,13 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 
 use crate::{
     cli::{
-        CommandExt as _, derive_adb_path, derive_ndk_path, derive_ndk_version,
-        is_supported_rustc_version, panic_hook,
+        CommandExt as _, HasCargoArgs, derive_adb_path, derive_ndk_path, derive_ndk_version, init,
     },
     meta::Target,
-    shell::{Shell, Verbosity},
 };
 
 #[derive(Debug, Parser, Clone)]
@@ -50,6 +48,12 @@ struct TestArgs {
     test_args: Vec<String>,
 }
 
+impl HasCargoArgs for TestArgs {
+    fn set_cargo_args(&mut self, args: Vec<String>) {
+        self.cargo_args = args;
+    }
+}
+
 pub struct TestUnit {
     executable: PathBuf,
     name: String,
@@ -58,60 +62,10 @@ pub struct TestUnit {
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    let valid_args = args.split(|x| x == "--").next().unwrap_or(&args);
+    let valid_args = args.split(|x| x == "--").next().unwrap_or(&args).to_vec();
 
-    if valid_args.contains(&"--help".to_string()) {
-        TestArgs::command().print_long_help().unwrap();
-        std::process::exit(0);
-    }
-
-    if valid_args.contains(&"-h".to_string()) {
-        TestArgs::command().print_help().unwrap();
-        std::process::exit(0);
-    }
-
-    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        std::process::exit(0);
-    }
-
-    let verbosity = if valid_args.contains(&"-q".into()) {
-        Verbosity::Quiet
-    } else if valid_args.contains(&"-vv".into()) {
-        Verbosity::VeryVerbose
-    } else if valid_args.contains(&"-v".into()) || valid_args.contains(&"--verbose".into()) {
-        Verbosity::Verbose
-    } else {
-        Verbosity::Normal
-    };
-
-    let color = args
-        .iter()
-        .position(|x| x == "--color")
-        .and_then(|p| args.get(p + 1))
-        .map(|x| &**x);
-
-    let mut shell = Shell::new();
-    shell.set_verbosity(verbosity);
-    shell.set_color_choice(color)?;
-
-    if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
-        std::panic::set_hook(Box::new(panic_hook));
-    }
-
-    shell.verbose(|shell| {
-        shell.status_with_color(
-            "Using",
-            format!("cargo-ndk v{} (test mode)", env!("CARGO_PKG_VERSION"),),
-            termcolor::Color::Cyan,
-        )
-    })?;
-
-    if !is_supported_rustc_version() {
-        shell.error("Rust compiler is too old and not supported by cargo-ndk.")?;
-        shell.note("Upgrade Rust to at least v1.68.0.")?;
-        std::process::exit(1);
-    }
+    let has_quiet_flag = valid_args.iter().any(|x| x == "-q" || x == "--quiet");
+    let (mut shell, args) = init::<TestArgs>(valid_args)?;
 
     let mut args = match TestArgs::try_parse_from(&args) {
         Ok(args) => args,
@@ -351,10 +305,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         )?;
         shell.reset_err()?;
 
-        let verbosity_arg = match verbosity {
-            Verbosity::Quiet => "-q",
-            _ => "",
-        };
+        let verbosity_arg = if has_quiet_flag { "-q" } else { "" };
 
         let run_status = Command::new(&adb_path)
             .with_serial(args.adb_serial.as_deref())

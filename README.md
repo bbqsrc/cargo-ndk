@@ -127,7 +127,7 @@ source <(cargo ndk-env)
 PowerShell:
 
 ```
-cargo ndk-env --powershell | Out-String | Invoke-Expression
+cargo ndk-env --powershell | Invoke-Expression
 ```
 
 Rust Analyzer and anything else with JSON-based environment handling:

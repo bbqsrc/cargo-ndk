@@ -1,15 +1,14 @@
-use std::{collections::BTreeMap, env};
+use std::collections::BTreeMap;
 
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 
 use crate::{
     cargo::{build_env, clang_target},
-    cli::derive_ndk_path,
+    cli::{derive_ndk_path, init},
     meta::Target,
-    shell::{Shell, Verbosity},
 };
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 struct EnvArgs {
     /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET")]
@@ -33,49 +32,8 @@ struct EnvArgs {
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
-    // Check for help/version before parsing to avoid required arg errors
-    if args.contains(&"--help".to_string()) {
-        EnvArgs::command().print_long_help().unwrap();
-        std::process::exit(0);
-    }
-
-    if args.contains(&"-h".to_string()) {
-        EnvArgs::command().print_help().unwrap();
-        std::process::exit(0);
-    }
-
-    if args.contains(&"--version".to_string()) || args.contains(&"-V".to_string()) {
-        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        std::process::exit(0);
-    }
-
-    let color = args
-        .iter()
-        .position(|x| x == "--color")
-        .and_then(|p| args.get(p + 1))
-        .map(|x| &**x);
-
-    let verbosity = if args.contains(&"-q".into()) {
-        Verbosity::Quiet
-    } else if args.contains(&"-vv".into()) {
-        Verbosity::VeryVerbose
-    } else if args.contains(&"-v".into()) || args.contains(&"--verbose".into()) {
-        Verbosity::Verbose
-    } else {
-        Verbosity::Normal
-    };
-
-    let mut shell = Shell::new();
-    shell.set_verbosity(verbosity);
-    shell.set_color_choice(color)?;
-
-    let args = match EnvArgs::try_parse_from(&args) {
-        Ok(args) => args,
-        Err(e) => {
-            shell.error(e)?;
-            std::process::exit(2);
-        }
-    };
+    let (mut shell, args) = init::<EnvArgs>(args)?;
+    let args = EnvArgs::try_parse_from(args)?;
 
     let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {
         Some((path, method)) => (path, method),
@@ -117,7 +75,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         }
         println!();
         println!("# To import with PowerShell:");
-        println!("#     cargo ndk-env --powershell | Out-String | Invoke-Expression");
+        println!("#     cargo ndk-env --powershell | Invoke-Expression");
     } else {
         for (k, v) in env {
             println!("export {}={:?}", k.to_uppercase().replace('-', "_"), v);
