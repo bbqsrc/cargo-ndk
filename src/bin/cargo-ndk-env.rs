@@ -9,5 +9,5 @@ fn main() -> anyhow::Result<()> {
 
     let args = std::env::args().skip(1).collect::<Vec<_>>();
 
-    cargo_ndk::cli::run_env(args)
+    cargo_ndk::cli::env::run(args)
 }
