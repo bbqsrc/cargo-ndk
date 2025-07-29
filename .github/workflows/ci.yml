@@ -3,33 +3,89 @@ on: [push, pull_request]
 name: CI
 
 jobs:
-  ci:
+  build:
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-        rust:
-          - stable
-          - beta
-          - nightly
-          - 1.86.0 # MSRV
+        include:
+          # MSRV builds
+          - name: Windows - MSRV
+            os: windows-latest
+            rust: 1.86.0
+            target: x86_64-pc-windows-msvc
+          - name: Linux - MSRV
+            os: ubuntu-latest
+            rust: 1.86.0
+            target: x86_64-unknown-linux-gnu
+          - name: macOS - MSRV
+            os: macos-latest
+            rust: 1.86.0
+            target: aarch64-apple-darwin
+          # Beta builds
+          - name: Windows - Beta
+            os: windows-latest
+            rust: beta
+            target: x86_64-pc-windows-msvc
+          - name: Linux - Beta
+            os: ubuntu-latest
+            rust: beta
+            target: x86_64-unknown-linux-gnu
+          - name: macOS - Beta
+            os: macos-latest
+            rust: beta
+            target: aarch64-apple-darwin
+          # Nightly builds
+          - name: Windows - Nightly
+            os: windows-latest
+            rust: nightly
+            target: x86_64-pc-windows-msvc
+          - name: Linux - Nightly
+            os: ubuntu-latest
+            rust: nightly
+            target: x86_64-unknown-linux-gnu
+          - name: macOS - Nightly
+            os: macos-latest
+            rust: nightly
+            target: aarch64-apple-darwin
+          # Stable builds with artifact creation
+          - name: Windows - Stable (x86_64)
+            os: windows-latest
+            rust: stable
+            target: x86_64-pc-windows-msvc
+            artifact_name: cargo-ndk_windows_x86_64
+          - name: Linux - Stable (x86_64)
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-gnu
+            artifact_name: cargo-ndk_linux_x86_64
+          - name: macOS - Stable (aarch64)
+            os: macos-latest
+            rust: stable
+            target: aarch64-apple-darwin
+            artifact_name: cargo-ndk_macos_aarch64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target && format('{0},', matrix.target) || '' }}aarch64-linux-android,armv7-linux-androideabi
+          components: rustfmt, clippy
+      - name: Check code formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
       - name: Install MSYS (Windows only)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
           path-type: inherit
           msystem: UCRT64
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-          targets: aarch64-linux-android, armv7-linux-androideabi
-          components: rustfmt, clippy
       - name: Run build
-        run: cargo install --locked --path .
+        run: cargo install --locked --target ${{ matrix.target }} --path .
       - name: Smoke test `ndk-env`
         run: cargo ndk-env --target armeabi-v7a
       - name: Run basic example
@@ -44,9 +100,164 @@ jobs:
         if: runner.os != 'Windows'
         working-directory: example/openssl
         run: cargo ndk -t arm64-v8a --platform 28 build
-      - name: Check code formatting
-        continue-on-error: true
-        run: cargo fmt --all -- --check
-      - name: Run clippy
-        continue-on-error: true
-        run: cargo clippy -- -D warnings
+      - name: Get version
+        if: matrix.artifact_name
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=dev" >> $GITHUB_OUTPUT
+          fi
+      - name: Build release binary
+        if: matrix.artifact_name
+        run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Copy binary (Unix)
+        if: matrix.artifact_name && runner.os != 'Windows'
+        run: |
+          mkdir artifacts
+          for file in cargo-ndk cargo-ndk-env cargo-ndk-test cargo-ndk-runner; do
+            cp target/${{ matrix.target }}/release/$file artifacts/$file
+          done
+      - name: Copy binary (Windows)
+        if: matrix.artifact_name && runner.os == 'Windows'
+        run: |
+          mkdir artifacts
+          foreach ($file in @('cargo-ndk.exe', 'cargo-ndk-env.exe', 'cargo-ndk-test.exe', 'cargo-ndk-runner.exe')) {
+            Copy-Item "target/${{ matrix.target }}/release/$file" "artifacts/$file"
+          }
+      - name: Create tar.gz archive (Unix)
+        if: matrix.artifact_name && runner.os != 'Windows'
+        run: |
+          cd artifacts
+          tar -cf ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar *
+          gzip -9 ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar
+      - name: Create zip archive (Windows)
+        if: matrix.artifact_name && runner.os == 'Windows'
+        run: |
+          cd artifacts
+          7z a -mx=9 ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.zip *
+      - name: Upload artifacts (Unix)
+        uses: actions/upload-artifact@v4
+        if: matrix.artifact_name && runner.os != 'Windows'
+        with:
+          name: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}
+          path: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar.gz
+      - name: Upload artifacts (Windows)
+        uses: actions/upload-artifact@v4
+        if: matrix.artifact_name && runner.os == 'Windows'
+        with:
+          name: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}
+          path: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.zip
+  build-non-host:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows - Stable (aarch64, non-host)
+            os: windows-latest
+            rust: stable
+            target: aarch64-pc-windows-msvc
+            artifact_name: cargo-ndk_windows_arm64
+          - name: Linux - Stable (aarch64, non-host)
+            os: ubuntu-latest
+            rust: stable
+            target: aarch64-unknown-linux-gnu
+            artifact_name: cargo-ndk_linux_aarch64
+            cross: true
+          - name: macOS - Stable (x86_64, non-host)
+            os: macos-latest
+            rust: stable
+            target: x86_64-apple-darwin
+            artifact_name: cargo-ndk_macos_x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
+      - name: Set up cross compilation (Linux)
+        if: matrix.cross
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+      - name: Build release binary (native)
+        if: '!matrix.cross'
+        run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Build release binary (cross)
+        if: matrix.cross
+        run: cross build --locked --release --target ${{ matrix.target }}
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=dev" >> $GITHUB_OUTPUT
+          fi
+      - name: Copy binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir artifacts
+          for file in cargo-ndk cargo-ndk-env cargo-ndk-test cargo-ndk-runner; do
+            cp target/${{ matrix.target }}/release/$file artifacts/$file
+          done
+      - name: Copy binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir artifacts
+          foreach ($file in @('cargo-ndk.exe', 'cargo-ndk-env.exe', 'cargo-ndk-test.exe', 'cargo-ndk-runner.exe')) {
+            Copy-Item "target/${{ matrix.target }}/release/$file" "artifacts/$file"
+          }
+      - name: Create tar.gz archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd artifacts
+          tar -cf ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar *
+          gzip -9 ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar
+      - name: Create zip archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd artifacts
+          7z a -mx=9 ../${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.zip *
+      - name: Upload artifacts (Unix)
+        uses: actions/upload-artifact@v4
+        if: runner.os != 'Windows'
+        with:
+          compression-level: 0
+          name: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}
+          path: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.tar.gz
+      - name: Upload artifacts (Windows)
+        uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          compression-level: 0
+          name: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}
+          path: ${{ matrix.artifact_name }}-${{ steps.version.outputs.VERSION }}.zip
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build, build-non-host]
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '.')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Unzip all the things
+        run: |
+          for file in artifacts/*.zip; do
+            unzip "$file" -d upload/
+          done
+          ls -l upload/
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: upload/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref, '-') }}
