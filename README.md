@@ -33,6 +33,18 @@ This cargo extension handles all the environment configuration needed for succes
 
 ## Installing
 
+You'll first need to install all the toolchains you intend to use. Simplest way is with the following:
+
+```
+rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    x86_64-linux-android \
+    i686-linux-android
+```
+
+Modify as necessary for your use case.
+
 ### With `cargo binstall`
 
 To eliminate time wasted building `cargo-ndk` in your CI pipelines, you can use [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall):
@@ -46,18 +58,6 @@ cargo binstall cargo-ndk
 ```
 cargo install cargo-ndk
 ```
-
-You'll also need to install all the toolchains you intend to use. Simplest way is with the following:
-
-```
-rustup target add \
-    aarch64-linux-android \
-    armv7-linux-androideabi \
-    x86_64-linux-android \
-    i686-linux-android
-```
-
-Modify as necessary for your use case.
 
 ## Examples
 
