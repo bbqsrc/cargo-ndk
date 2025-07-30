@@ -1,6 +1,6 @@
 ## Changelog
 
-### v4.0.0-beta.2 - 2025-07-30
+### v4.0.0 - 2025-07-30
 
 This version of `cargo-ndk` is much closer to a thin passthrough to `cargo` than previous versions. Please take note of the breaking changes.
 
