@@ -129,7 +129,13 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     let triple = target.triple();
     let clang_target = crate::cargo::clang_target(triple, platform);
 
-    let env_vars = crate::cargo::build_env(triple, &ndk_home, &clang_target, args.link_builtins);
+    let env_vars = crate::cargo::build_env(
+        triple,
+        &ndk_home,
+        &ndk_version,
+        &clang_target,
+        args.link_builtins,
+    );
 
     shell.verbose(|shell| {
         shell.status_with_color(

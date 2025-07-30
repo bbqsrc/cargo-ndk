@@ -4,7 +4,7 @@ use clap::Parser;
 
 use crate::{
     cargo::{build_env, clang_target},
-    cli::{derive_ndk_path, init},
+    cli::{derive_ndk_path, derive_ndk_version, init},
     meta::Target,
 };
 
@@ -46,12 +46,14 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         }
     };
 
+    let ndk_version = derive_ndk_version(&ndk_home)?;
     let clang_target = clang_target(args.target.triple(), args.platform);
 
     // Try command line, then config. Config falls back to defaults in any case.
     let env = build_env(
         args.target.triple(),
         &ndk_home,
+        &ndk_version,
         &clang_target,
         args.link_builtins,
     )
