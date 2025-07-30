@@ -33,6 +33,16 @@ This cargo extension handles all the environment configuration needed for succes
 
 ## Installing
 
+### With `cargo binstall`
+
+To eliminate time wasted building `cargo-ndk` in your CI pipelines, you can use [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall):
+
+```
+cargo binstall cargo-ndk
+```
+
+### Building from source
+
 ```
 cargo install cargo-ndk
 ```

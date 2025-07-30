@@ -17,6 +17,7 @@ It also introduces a `cargo ndk-runner` subcommand (which is used by `ndk-test` 
 - **Breaking change**: Removed Cargo.toml-based configuration property handling
 - **Breaking change**: Bump minimum supported Rust version (MSRV) to 1.86 and use Rust edition 2024.
 - **Breaking change**: `--bindgen` has been removed, and relevant environment variables are set by default
+- Feature: `cargo-ndk` can now be installed with `cargo binstall`
 - Feature: Clang builtins can now be linked automatically by adding `--link-builtins` or its equivalent environment variable
 - Feature: `cargo ndk-test` for running tests on Android devices.
 - Feature: `cargo ndk-runner` for running binaries on Android devices.
