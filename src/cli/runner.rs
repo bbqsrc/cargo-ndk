@@ -79,7 +79,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
 
     let push_status = Command::new(&adb_path)
-        .with_serial(adb_serial.as_deref())
+        .with_serial(adb_serial)
         .arg("push")
         .arg(&args.executable)
         .arg(&device_path)
@@ -97,7 +97,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     // Make binary executable
     let chmod_status = Command::new(&adb_path)
-        .with_serial(adb_serial.as_deref())
+        .with_serial(adb_serial)
         .arg("shell")
         .arg("chmod")
         .arg("755")
@@ -117,7 +117,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     };
 
     let run_status = Command::new(&adb_path)
-        .with_serial(adb_serial.as_deref())
+        .with_serial(adb_serial)
         .arg("shell")
         .arg(&device_path)
         .arg(verbosity_arg)
@@ -126,7 +126,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     // Clean up the binary from device
     let _ = Command::new(&adb_path)
-        .with_serial(adb_serial.as_deref())
+        .with_serial(adb_serial)
         .arg("shell")
         .arg("rm")
         .arg(&device_path)

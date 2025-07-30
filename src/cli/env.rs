@@ -32,7 +32,7 @@ struct EnvArgs {
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
-    let (mut shell, args) = init::<EnvArgs>(args)?;
+    let (mut shell, args) = init(args)?;
     let args = EnvArgs::try_parse_from(args)?;
 
     let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {

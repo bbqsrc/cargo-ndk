@@ -86,9 +86,9 @@ fn clang_lib_path(ndk_home: &Path) -> PathBuf {
         .join("linux")
 }
 
-const CARGO_NDK_SYSROOT_PATH_KEY: &'static str = "CARGO_NDK_SYSROOT_PATH";
-const CARGO_NDK_SYSROOT_TARGET_KEY: &'static str = "CARGO_NDK_SYSROOT_TARGET";
-const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &'static str = "CARGO_NDK_SYSROOT_LIBS_PATH";
+const CARGO_NDK_SYSROOT_PATH_KEY: &str = "CARGO_NDK_SYSROOT_PATH";
+const CARGO_NDK_SYSROOT_TARGET_KEY: &str = "CARGO_NDK_SYSROOT_TARGET";
+const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &str = "CARGO_NDK_SYSROOT_LIBS_PATH";
 
 pub(crate) fn build_env(
     triple: &str,

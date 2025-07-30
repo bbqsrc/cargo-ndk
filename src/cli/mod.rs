@@ -370,7 +370,7 @@ impl StringVecExt for Vec<String> {
     }
 }
 
-pub(self) fn init<T: Parser + Clone>(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
+fn init(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
     if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
         std::panic::set_hook(Box::new(panic_hook));
     }
@@ -429,7 +429,7 @@ pub(self) fn init<T: Parser + Clone>(args: Vec<String>) -> anyhow::Result<(Shell
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    let (mut shell, args) = init::<BuildArgs>(args)?;
+    let (mut shell, args) = init(args)?;
 
     let args = match parse_mixed_args::<BuildArgs>(args) {
         Ok(args) => args,

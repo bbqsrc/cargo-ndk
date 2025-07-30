@@ -51,7 +51,7 @@ impl HasCargoArgs for TestArgs {
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
     let valid_args = args.split(|x| x == "--").next().unwrap_or(&args).to_vec();
-    let (mut shell, _) = init::<TestArgs>(valid_args)?;
+    let (mut shell, _) = init(valid_args)?;
 
     let mut args = match TestArgs::try_parse_from(&args) {
         Ok(args) => args,
