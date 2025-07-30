@@ -25,6 +25,7 @@ It also introduces a `cargo ndk-runner` subcommand (which is used by `ndk-test` 
 - Enhancement: Added environment variable support for configuration flags with `CARGO_NDK_` prefix (e.g., `CARGO_NDK_TARGET`, `CARGO_NDK_PLATFORM`, `CARGO_NDK_OUTPUT_DIR`)
 - Enhancement: Target flag now supports comma-delimited lists for specifying multiple targets
 - Enhancement: Added cargo-ndk version information to very verbose (`-vv`) output.
+- Enhancement: Add relevant linker flags for NDKs older than 27 to support 16kb page sizes
 - Fix: Fixed issue where `--manifest-path` and other flags using `--flag=value` format could be passed to cargo twice.
 
 ### v3.5.7 - 2024-08-19

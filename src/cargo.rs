@@ -90,9 +90,14 @@ const CARGO_NDK_SYSROOT_PATH_KEY: &str = "CARGO_NDK_SYSROOT_PATH";
 const CARGO_NDK_SYSROOT_TARGET_KEY: &str = "CARGO_NDK_SYSROOT_TARGET";
 const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &str = "CARGO_NDK_SYSROOT_LIBS_PATH";
 
+fn is_64bit(triple: &str) -> bool {
+    triple.starts_with("aarch64") || triple.starts_with("x86_64")
+}
+
 pub(crate) fn build_env(
     triple: &str,
     ndk_home: &Path,
+    ndk_version: &Version,
     clang_target: &str,
     link_builtins: bool,
 ) -> BTreeMap<String, OsString> {
@@ -176,9 +181,41 @@ pub(crate) fn build_env(
     .into_iter()
     .collect::<BTreeMap<String, OsString>>();
 
+    // cmd.arg(format!("-L{builtins_path}"));
+
+    // // Extract arch from target triple (e.g., "aarch64-linux-android21" -> "aarch64")
+    // let arch = std::env::var("CARGO_NDK_SYSROOT_TARGET")
+    //     .expect("cargo-ndk rustc linker: didn't find CARGO_NDK_SYSROOT_TARGET");
+    // let arch = arch.split('-').next().unwrap();
+    // cmd.arg(format!("-lclang_rt.builtins-{arch}-android"));
+
+    let mut ldflags = vec![];
+
     if link_builtins {
         let builtins_path = clang_lib_path(ndk_home);
-        envs.insert("_CARGO_NDK_LINK_BUILTINS".to_string(), builtins_path.into());
+
+        ldflags.push(format!("-L{}", builtins_path.display()));
+        ldflags.push(format!(
+            "-lclang_rt.builtins-{}-android",
+            sysroot_target(triple).split('-').next().unwrap()
+        ));
+    }
+
+    // 64-bit android requires 16kb pages now. It is the default for NDK r28+.
+    // https://developer.android.com/guide/practices/page-sizes
+    if is_64bit(triple) {
+        if ndk_version.major <= 27 {
+            ldflags.push("-Wl,-z,max-page-size=16384".to_string());
+        }
+
+        if ndk_version.major <= 22 {
+            ldflags.push("-Wl,-z,common-page-size=16384".to_string());
+        }
+    }
+
+    if !ldflags.is_empty() {
+        let builtins_path = ldflags.join("\0");
+        envs.insert("_CARGO_NDK_LDFLAGS".to_string(), builtins_path.into());
     }
 
     if env::var("MSYSTEM").is_ok() || env::var("CYGWIN").is_ok() {
@@ -248,7 +285,7 @@ pub(crate) fn run(
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(triple, ndk_home, &clang_target, link_builtins);
+    let envs = build_env(triple, ndk_home, version, &clang_target, link_builtins);
 
     shell
         .very_verbose(|shell| {
