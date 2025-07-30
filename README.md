@@ -4,8 +4,32 @@
 <img alt="Minimum supported Rust version: 1.86" src="https://img.shields.io/badge/MSRV-1.86-informational">
 [<img alt="Crates.io Version" src="https://img.shields.io/crates/v/cargo-ndk">](https://lib.rs/crates/cargo-ndk)
 
-This cargo extension handles all the environment configuration needed for successfully building libraries
-for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
+This cargo extension handles all the environment configuration needed for successfully building libraries or binaries for Android from a Rust codebase, with support for generating the correct `jniLibs` directory structure.
+
+`cargo-ndk` provides three subcommands to cargo:
+
+- `cargo ndk` — a passthrough for `cargo` applying all the relevant environment variables to ensure a successful build against the NDK
+- `cargo ndk-test` — run tests via `adb` automagically
+- `cargo ndk-env` — generate sh exports, PowerShell env vars or JSON (i.e. for Visual Studio Code) to make `rust-analyzer` happy, or other unspeakable crimes I hope you keep to yourself
+
+## Table of Contents
+
+- [Installing](#installing)
+- [Examples](#examples)
+  - [Building a library for 32-bit and 64-bit ARM systems](#building-a-library-for-32-bit-and-64-bit-arm-systems)
+  - [Linking against and copying `libc++_shared.so`](#linking-against-and-copying-libc_sharedso-into-the-relevant-places-in-the-output-directory)
+- [Usage](#usage)
+  - [Using `cargo run` binaries via adb](#using-cargo-run-binaries-via-adb)
+  - [Running your tests on an Android device](#running-your-tests-on-an-android-device)
+  - [Controlling verbosity](#controlling-verbosity)
+  - [Environment variable configuration](#environment-variable-configuration)
+  - [Providing environment variables for C dependencies](#providing-environment-variables-for-c-dependencies)
+  - [`cargo-ndk`-specific environment variables](#cargo-ndk-specific-environment-variables)
+  - [Printing the environment](#printing-the-environment)
+- [Troubleshooting](#troubleshooting)
+- [Supported hosts](#supported-hosts)
+- [Local development](#local-development)
+- [License](#license)
 
 ## Installing
 
@@ -25,23 +49,9 @@ rustup target add \
 
 Modify as necessary for your use case.
 
-## Usage
+## Examples
 
-If you have installed the NDK with Android Studio to its default location, `cargo ndk` will automatically detect
-the most recent NDK version and use it. This can be overriden by specifying the path to the NDK root directory in
-the `ANDROID_NDK_HOME` environment variable.
-
-### Examples
-
-#### Running your tests on an Android device
-
-```
-cargo ndk-test -t armeabi-v7a
-```
-
-This uses `adb` under the hood to push the binaries to a connected device, and running it in the Android shell.
-
-#### Building a library for 32-bit and 64-bit ARM systems
+### Building a library for 32-bit and 64-bit ARM systems
 
 ```
 cargo ndk -t armeabi-v7a -t arm64-v8a -o ./jniLibs build --release
@@ -52,7 +62,7 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
 
-#### Linking against and copying `libc++_shared.so` into the relevant places in the output directory
+### Linking against and copying `libc++_shared.so` into the relevant places in the output directory
 
 Create a `build.rs` in your project with the following:
 
@@ -82,6 +92,31 @@ fn android() {
     }
 }
 ```
+
+## Usage
+
+If you have installed the NDK with Android Studio to its default location, `cargo ndk` will automatically detect
+the most recent NDK version and use it. This can be overriden by specifying the path to the NDK root directory in
+the `ANDROID_NDK_HOME` environment variable.
+
+### Using `cargo run` binaries via adb
+
+If you want `cargo run` to automatically run via `adb` for Android builds, add a `.cargo/config.toml` to your project with the following content:
+
+```toml
+[target.aarch64-linux-android]
+runner = "cargo ndk-runner"
+```
+
+Add for each target that you are using.
+
+### Running your tests on an Android device
+
+```
+cargo ndk-test -t armeabi-v7a
+```
+
+This uses `cargo ndk-runner` under the hood to push the binaries to a connected device, and running it in the Android shell.
 
 ### Controlling verbosity
 
@@ -134,6 +169,12 @@ Rust Analyzer and anything else with JSON-based environment handling:
 
 For configuring rust-analyzer, add the `--json` flag and paste the blob into the relevant place in the config.
 
+## Troubleshooting
+
+### The build is complaining that some compiler builtins are missing. What do I do?
+
+Add `--link-builtins` to your `cargo ndk build` command and you should be happy.
+
 ## Supported hosts
 
 - Linux
@@ -149,10 +190,6 @@ You can also build for Termux or similar by providing the environment variable `
 ```bash
 cargo install --path .
 ```
-
-## Similar projects
-
-* [cargo-cocoapods](https://github.com/bbqsrc/cargo-cocoapods) - for building .a files for all Apple platforms, and bundling for CocoaPods
 
 ## License
 
