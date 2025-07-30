@@ -622,7 +622,7 @@ mod imp {
             // INVALID_HANDLE_VALUE. Use an alternate method which works
             // in that case as well.
             let h = CreateFileA(
-                "CONOUT$\0".as_ptr() as PCSTR,
+                c"CONOUT$".as_ptr() as PCSTR,
                 GENERIC_READ | GENERIC_WRITE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 ptr::null_mut(),
@@ -660,7 +660,7 @@ fn default_err_erase_line(shell: &mut Shell) {
     match imp::stderr_width() {
         TtyWidth::Known(max_width) | TtyWidth::Guess(max_width) => {
             let blank = " ".repeat(max_width);
-            drop(write!(shell.output.stderr(), "{}\r", blank));
+            drop(write!(shell.output.stderr(), "{blank}\r"));
         }
         _ => (),
     }
