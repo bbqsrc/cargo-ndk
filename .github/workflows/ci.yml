@@ -161,10 +161,20 @@ jobs:
             os: windows-latest
             rust: stable
             target: aarch64-pc-windows-msvc
+          - name: Linux - Stable (x86_64-musl, non-host)
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-musl
+            cross: true
           - name: Linux - Stable (aarch64, non-host)
             os: ubuntu-latest
             rust: stable
             target: aarch64-unknown-linux-gnu
+            cross: true
+          - name: Linux - Stable (aarch64-musl, non-host)
+            os: ubuntu-latest
+            rust: stable
+            target: aarch64-unknown-linux-musl
             cross: true
           - name: macOS - Stable (x86_64, non-host)
             os: macos-latest

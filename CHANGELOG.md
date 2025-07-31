@@ -1,5 +1,9 @@
 ## Changelog
 
+### v4.0.1 - 2025-07-31
+
+- Enhancement: add `musl` builds
+
 ### v4.0.0 - 2025-07-30
 
 This version of `cargo-ndk` is much closer to a thin passthrough to `cargo` than previous versions. Please take note of the breaking changes.
