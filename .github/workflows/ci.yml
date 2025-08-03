@@ -87,7 +87,7 @@ jobs:
         run: cargo ndk-env --target armeabi-v7a
       - name: Run basic example
         working-directory: example/basic
-        run: cargo ndk -t armeabi-v7a -o jniLibs build
+        run: cargo ndk -t armeabi-v7a -o jniLibs -- build
       - name: Run openssl example (Windows)
         if: runner.os == 'Windows'
         shell: 'msys2 {0}'

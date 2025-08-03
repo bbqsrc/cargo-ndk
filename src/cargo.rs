@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use cargo_metadata::{Artifact, Message, semver::Version};
 
-use crate::{ARCH, shell::Shell};
+use crate::{ARCH, cargo, shell::Shell};
 
 pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
     let target = match rust_target {
@@ -273,14 +273,8 @@ pub(crate) fn run(
         std::process::exit(1);
     }
 
-    // Insert Cargo arguments before any `--` arguments.
-    let arg_insertion_position = cargo_args
-        .iter()
-        .enumerate()
-        .find(|e| e.1.trim() == "--")
-        .map_or(cargo_args.len(), |e| e.0);
-
     let mut cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
+    println!("cargo args: {cargo_args:?}");
 
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
@@ -311,8 +305,8 @@ pub(crate) fn run(
         Some(parent) => {
             if parent != dir {
                 // log::debug!("Working directory does not match manifest-path");
-                cargo_args.insert(arg_insertion_position, cargo_manifest.into());
-                cargo_args.insert(arg_insertion_position, "--manifest-path".into());
+                cargo_args.push("--manifest-path".into());
+                cargo_args.push(cargo_manifest.into());
             }
         }
         _ => {
@@ -320,11 +314,17 @@ pub(crate) fn run(
         }
     }
 
-    cargo_args.insert(arg_insertion_position, triple.into());
-    cargo_args.insert(arg_insertion_position, "--target".into());
+    cargo_args.push("--target".into());
+    cargo_args.push(triple.into());
 
-    cargo_args.insert(arg_insertion_position, "json-render-diagnostics".into());
-    cargo_args.insert(arg_insertion_position, "--message-format".into());
+    cargo_args.push("--message-format".into());
+    cargo_args.push("json-render-diagnostics".into());
+
+    let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
+        &cargo_args[1..]
+    } else {
+        &cargo_args[..]
+    };
 
     let mut child = cargo_cmd
         .args(cargo_args)
