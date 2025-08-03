@@ -1,5 +1,10 @@
 ## Changelog
 
+### v4.0.2 - 2025-08-03
+
+- Fix: `--` handled correctly again
+- Fix: `-p` re-added
+
 ### v4.0.1 - 2025-07-31
 
 - Enhancement: add `musl` builds
