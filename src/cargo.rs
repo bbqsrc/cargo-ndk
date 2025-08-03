@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use cargo_metadata::{Artifact, Message, semver::Version};
 
-use crate::{ARCH, cargo, shell::Shell};
+use crate::{ARCH, shell::Shell};
 
 pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
     let target = match rust_target {
