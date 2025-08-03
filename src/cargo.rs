@@ -274,7 +274,6 @@ pub(crate) fn run(
     }
 
     let mut cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
-    println!("cargo args: {cargo_args:?}");
 
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
