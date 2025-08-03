@@ -14,7 +14,7 @@ struct TestArgs {
     target: Target,
 
     /// Platform (also known as API level)
-    #[arg(long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
+    #[arg(short, long, default_value_t = 21, env = "CARGO_NDK_PLATFORM")]
     platform: u8,
 
     /// Links Clang builtins library
