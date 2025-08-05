@@ -1,5 +1,9 @@
 ## Changelog
 
+### v4.0.3 - 2025-08-05
+
+- Fix: changed `-p` to `-P`, since that should not conflict with `cargo`
+
 ### v4.0.2 - 2025-08-03
 
 - Fix: `--` handled correctly again
