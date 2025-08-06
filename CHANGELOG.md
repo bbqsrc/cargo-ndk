@@ -1,5 +1,9 @@
 ## Changelog
 
+### v4.1.1 - 2025-08-06
+
+- Fix: cleanup pointless debug logging (I am so bad at this)
+
 ### v4.1.0 - 2025-08-06
 
 - Feature: added `--link-cxx-shared` flag for linking and copying `libc++_shared.so`
