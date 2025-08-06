@@ -282,7 +282,6 @@ pub(crate) fn run(
         })
         .unwrap();
 
-    println!("env: {envs:#?}");
     cargo_cmd.current_dir(dir).envs(envs);
 
     let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
@@ -323,9 +322,6 @@ pub(crate) fn run(
     if !subcommand_args.is_empty() {
         cargo_cmd.args(subcommand_args);
     }
-
-    println!("cargo_args: {cargo_args:#?}");
-    println!("subcommand_args: {subcommand_args:#?}");
 
     let mut child = cargo_cmd
         .stdin(Stdio::inherit())
