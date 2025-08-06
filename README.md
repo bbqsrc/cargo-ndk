@@ -17,7 +17,6 @@ This cargo extension handles all the environment configuration needed for succes
 - [Installing](#installing)
 - [Examples](#examples)
   - [Building a library for 32-bit and 64-bit ARM systems](#building-a-library-for-32-bit-and-64-bit-arm-systems)
-  - [Linking against and copying `libc++_shared.so`](#linking-against-and-copying-libc_sharedso-into-the-relevant-places-in-the-output-directory)
 - [Usage](#usage)
   - [Using `cargo run` binaries via adb](#using-cargo-run-binaries-via-adb)
   - [Running your tests on an Android device](#running-your-tests-on-an-android-device)
