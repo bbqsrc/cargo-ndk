@@ -306,7 +306,10 @@ pub(crate) fn run(
     };
 
     // Handle the case where `--` is sent to the subcommand
-    let mid = cargo_args.iter().position(|arg| arg == "--").unwrap_or(cargo_args.len());
+    let mid = cargo_args
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(cargo_args.len());
     let (cargo_args, subcommand_args) = cargo_args.split_at(mid);
     let mut cargo_args = cargo_args.to_vec();
 
