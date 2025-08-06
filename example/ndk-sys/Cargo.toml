@@ -1,0 +1,11 @@
+[package]
+name = "ndk-sys-example"
+version = "0.1.0"
+authors = ["Brendan Molloy <brendan@bbqsrc.net>"]
+edition = "2024"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+ndk-sys = "0.6.0"

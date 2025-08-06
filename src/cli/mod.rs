@@ -439,6 +439,8 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         }
     };
 
+    println!("args: {args:#?}");
+
     if args.cargo_args.is_empty() {
         shell.error("No args found to pass to cargo!")?;
         shell.note("You still need to specify build arguments to cargo to achieve anything. :)")?;

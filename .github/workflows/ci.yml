@@ -97,6 +97,9 @@ jobs:
         if: runner.os != 'Windows'
         working-directory: example/openssl
         run: cargo ndk -t arm64-v8a --platform 28 build
+      - name: Run ndk-sys example
+        working-directory: example/ndk-sys
+        run: cargo ndk --target arm64-v8a --platform 26 -- clippy --all --all-features --tests -- -D warnings
       - name: Build release binary
         if: ${{ contains(matrix.name, 'Stable') }}
         run: cargo build --locked --release --target ${{ matrix.target }}

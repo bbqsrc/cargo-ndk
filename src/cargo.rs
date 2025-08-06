@@ -273,8 +273,7 @@ pub(crate) fn run(
         std::process::exit(1);
     }
 
-    let mut cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
-
+    let cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
@@ -300,6 +299,17 @@ pub(crate) fn run(
 
     cargo_cmd.current_dir(dir).envs(envs);
 
+    let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
+        &cargo_args[1..]
+    } else {
+        &cargo_args[..]
+    };
+
+    // Handle the case where `--` is sent to the subcommand
+    let mid = cargo_args.iter().position(|arg| arg == "--").unwrap_or(cargo_args.len());
+    let (cargo_args, subcommand_args) = cargo_args.split_at(mid);
+    let mut cargo_args = cargo_args.to_vec();
+
     match dir.parent() {
         Some(parent) => {
             if parent != dir {
@@ -319,14 +329,13 @@ pub(crate) fn run(
     cargo_args.push("--message-format".into());
     cargo_args.push("json-render-diagnostics".into());
 
-    let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
-        &cargo_args[1..]
-    } else {
-        &cargo_args[..]
-    };
+    cargo_cmd.args(&cargo_args);
+
+    if !subcommand_args.is_empty() {
+        cargo_cmd.args(subcommand_args);
+    }
 
     let mut child = cargo_cmd
-        .args(cargo_args)
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdout(Stdio::piped())
