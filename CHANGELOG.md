@@ -1,5 +1,9 @@
 ## Changelog
 
+### v4.1.0 - 2025-08-06
+
+- Feature: added `--link-cxx-shared` flag for linking and copying `libc++_shared.so`
+
 ### v4.0.4 - 2025-08-06
 
 - Fix: fix nested `--` handling
@@ -40,7 +44,7 @@ It also introduces a `cargo ndk-runner` subcommand (which is used by `ndk-test` 
 - Feature: `cargo ndk-runner` for running binaries on Android devices.
 - Enhancement: Can now be built for an Android host (i.e. Termux) if built with `CARGO_NDK_ON_ANDROID` environment variable set
 - Enhancement: CLI flags can now be used in any order (e.g., `cargo ndk -t x86 build` and `cargo ndk build --target x86` are equivalent).
-- Enhancement: Added environment variable support for configuration flags with `CARGO_NDK_` prefix (e.g., `CARGO_NDK_TARGET`, `CARGO_NDK_PLATFORM`, `CARGO_NDK_OUTPUT_DIR`)
+- Enhancement: Added environment variable support for configuration flags with `CARGO_NDK_` prefix (e.g., `CARGO_NDK_TARGET`, `CARGO_NDK_PLATFORM`, `CARGO_NDK_OUTPUT_PATH`)
 - Enhancement: Target flag now supports comma-delimited lists for specifying multiple targets
 - Enhancement: Added cargo-ndk version information to very verbose (`-vv`) output.
 - Enhancement: Add relevant linker flags for NDKs older than 27 to support 16kb page sizes

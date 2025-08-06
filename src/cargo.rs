@@ -10,35 +10,7 @@ use std::{
 use anyhow::{Context, Result};
 use cargo_metadata::{Artifact, Message, semver::Version};
 
-use crate::{ARCH, shell::Shell};
-
-pub(crate) fn clang_target(rust_target: &str, api_level: u8) -> String {
-    let target = match rust_target {
-        "arm-linux-androideabi" => "armv7a-linux-androideabi",
-        "armv7-linux-androideabi" => "armv7a-linux-androideabi",
-        _ => rust_target,
-    };
-    format!("--target={target}{api_level}")
-}
-
-fn sysroot_target(rust_target: &str) -> &str {
-    (match rust_target {
-        "armv7-linux-androideabi" => "arm-linux-androideabi",
-        _ => rust_target,
-    }) as _
-}
-
-fn ndk_tool(arch: &str, tool: &str) -> PathBuf {
-    ["toolchains", "llvm", "prebuilt", arch, "bin", tool]
-        .iter()
-        .collect()
-}
-
-fn sysroot_suffix(arch: &str) -> PathBuf {
-    ["toolchains", "llvm", "prebuilt", arch, "sysroot"]
-        .iter()
-        .collect()
-}
+use crate::{ARCH, clang_target, ndk_tool, shell::Shell, sysroot_suffix, sysroot_target};
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
@@ -100,6 +72,7 @@ pub(crate) fn build_env(
     ndk_version: &Version,
     clang_target: &str,
     link_builtins: bool,
+    link_cxx_shared: bool,
 ) -> BTreeMap<String, OsString> {
     let cargo_ndk_path = dunce::canonicalize(env::args().next().unwrap())
         .expect("Failed to canonicalize absolute path to cargo-ndk")
@@ -201,6 +174,10 @@ pub(crate) fn build_env(
         ));
     }
 
+    if link_cxx_shared {
+        ldflags.push("-lc++_shared".to_string());
+    }
+
     // 64-bit android requires 16kb pages now. It is the default for NDK r28+.
     // https://developer.android.com/guide/practices/page-sizes
     if is_64bit(triple) {
@@ -214,7 +191,7 @@ pub(crate) fn build_env(
     }
 
     if !ldflags.is_empty() {
-        let builtins_path = ldflags.join("\0");
+        let builtins_path = ldflags.join("\x1f");
         envs.insert("_CARGO_NDK_LDFLAGS".to_string(), builtins_path.into());
     }
 
@@ -265,6 +242,7 @@ pub(crate) fn run(
     triple: &str,
     platform: u8,
     link_builtins: bool,
+    link_cxx_shared: bool,
     cargo_args: &[String],
     cargo_manifest: &Path,
 ) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
@@ -277,7 +255,14 @@ pub(crate) fn run(
     let clang_target = clang_target(triple, platform);
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(triple, ndk_home, version, &clang_target, link_builtins);
+    let envs = build_env(
+        triple,
+        ndk_home,
+        version,
+        &clang_target,
+        link_builtins,
+        link_cxx_shared,
+    );
 
     shell
         .very_verbose(|shell| {
@@ -297,6 +282,7 @@ pub(crate) fn run(
         })
         .unwrap();
 
+    println!("env: {envs:#?}");
     cargo_cmd.current_dir(dir).envs(envs);
 
     let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
@@ -337,6 +323,9 @@ pub(crate) fn run(
     if !subcommand_args.is_empty() {
         cargo_cmd.args(subcommand_args);
     }
+
+    println!("cargo_args: {cargo_args:#?}");
+    println!("subcommand_args: {subcommand_args:#?}");
 
     let mut child = cargo_cmd
         .stdin(Stdio::inherit())

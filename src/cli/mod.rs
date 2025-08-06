@@ -12,13 +12,15 @@ use std::{
 };
 
 use anyhow::Context;
-use cargo_metadata::{Artifact, CrateType, MetadataCommand, camino::Utf8Path, semver::Version};
+use cargo_metadata::{Artifact, CrateType, MetadataCommand, semver::Version};
 use clap::{CommandFactory, Parser};
 use filetime::FileTime;
 
 use crate::{
+    ARCH,
     meta::{Target, default_targets},
     shell::{Shell, Verbosity},
+    sysroot_suffix, sysroot_target,
 };
 
 trait CommandExt {
@@ -48,8 +50,12 @@ struct BuildArgs {
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
 
+    /// Links libc++_shared library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_LIBCXX_SHARED")]
+    link_libcxx_shared: bool,
+
     /// Output to a `jniLibs` directory in the correct sub-directories
-    #[arg(short, long, value_name = "DIR", env = "CARGO_NDK_OUTPUT_DIR")]
+    #[arg(short, long, value_name = "DIR", env = "CARGO_NDK_OUTPUT_PATH")]
     output_dir: Option<PathBuf>,
 
     /// Path to Cargo.toml
@@ -659,6 +665,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 triple,
                 platform,
                 args.link_builtins,
+                args.link_libcxx_shared,
                 &args.cargo_args,
                 &cargo_manifest,
             )?;
@@ -703,6 +710,36 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 std::process::exit(1);
             }
 
+            if args.link_libcxx_shared {
+                let cargo_ndk_sysroot_path = ndk_home.join(sysroot_suffix(ARCH));
+                let cargo_ndk_sysroot_target = sysroot_target(target.triple());
+                let cargo_ndk_sysroot_libs_path = cargo_ndk_sysroot_path
+                    .join("usr")
+                    .join("lib")
+                    .join(cargo_ndk_sysroot_target);
+                let dest = arch_output_dir.join("libc++_shared.so");
+
+                if is_fresh(&cargo_ndk_sysroot_libs_path, &dest)? {
+                    shell.verbose(|shell| shell.status("Fresh", "libc++_shared.so"))?;
+                } else {
+                    shell.verbose(|shell| {
+                        shell.status(
+                            "Copying",
+                            format!("libc++_shared.so -> {}", &dest.display()),
+                        )
+                    })?;
+
+                    fs::copy(cargo_ndk_sysroot_libs_path.join("libc++_shared.so"), &dest)
+                        .with_context(|| {
+                            format!(
+                                "failed to copy libc++_shared.so from {} to {}",
+                                cargo_ndk_sysroot_libs_path.display(),
+                                output_dir.display()
+                            )
+                        })?;
+                }
+            }
+
             for artifact in artifacts.iter().filter(|a| artifact_is_cdylib(a)) {
                 let Some(file) = artifact
                     .filenames
@@ -717,8 +754,8 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
                 let dest = arch_output_dir.join(file.file_name().unwrap());
 
-                if is_fresh(file, &dest)? {
-                    shell.status("Fresh", file)?;
+                if is_fresh(file.as_std_path(), &dest)? {
+                    shell.verbose(|shell| shell.status("Fresh", file))?;
                     continue;
                 }
 
@@ -770,7 +807,7 @@ fn artifact_is_cdylib(artifact: &Artifact) -> bool {
 
 /// Check if the source file has changed and should be copied over to the destination path.
 #[inline]
-fn is_fresh(src: &Utf8Path, dest: &Path) -> anyhow::Result<bool> {
+fn is_fresh(src: &Path, dest: &Path) -> anyhow::Result<bool> {
     if !dest.exists() {
         return Ok(false);
     }

@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use clap::Parser;
 
 use crate::{
-    cargo::{build_env, clang_target},
+    cargo::build_env,
+    clang_target,
     cli::{derive_ndk_path, derive_ndk_version, init},
     meta::Target,
 };
@@ -21,6 +22,10 @@ struct EnvArgs {
     /// Links Clang builtins library
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
+
+    /// Links libc++_shared library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_LIBCXX_SHARED")]
+    link_libcxx_shared: bool,
 
     /// Use PowerShell syntax
     #[arg(long)]
@@ -56,6 +61,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         &ndk_version,
         &clang_target,
         args.link_builtins,
+        args.link_libcxx_shared,
     )
     .into_iter()
     .filter(|(k, _)| !k.starts_with('_'))

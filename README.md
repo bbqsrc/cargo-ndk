@@ -72,37 +72,6 @@ expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
 
-### Linking against and copying `libc++_shared.so` into the relevant places in the output directory
-
-Create a `build.rs` in your project with the following:
-
-```rust
-use std::{env, path::{Path, PathBuf}};
-
-fn main() {
-    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "android" {
-        android();
-    }
-}
-
-fn android() {
-    println!("cargo:rustc-link-lib=c++_shared");
-
-    if let Ok(output_path) = env::var("CARGO_NDK_OUTPUT_PATH") {
-        let sysroot_libs_path =
-            PathBuf::from(env::var_os("CARGO_NDK_SYSROOT_LIBS_PATH").unwrap());
-        let lib_path = sysroot_libs_path.join("libc++_shared.so");
-        std::fs::copy(
-            lib_path,
-            Path::new(&output_path)
-                .join(&env::var("CARGO_NDK_ANDROID_TARGET").unwrap())
-                .join("libc++_shared.so"),
-        )
-        .unwrap();
-    }
-}
-```
-
 ## Usage
 
 If you have installed the NDK with Android Studio to its default location, `cargo ndk` will automatically detect
@@ -138,7 +107,7 @@ You can configure `cargo-ndk` using environment variables with the `CARGO_NDK_` 
 
 - `CARGO_NDK_TARGET`: Set default target(s) (comma-separated for multiple targets)
 - `CARGO_NDK_PLATFORM`: Set default API platform level  
-- `CARGO_NDK_OUTPUT_DIR`: Set default output directory
+- `CARGO_NDK_OUTPUT_PATH`: Set default output directory
 
 These can be overridden by command-line arguments.
 
@@ -184,6 +153,10 @@ For configuring rust-analyzer, add the `--json` flag and paste the blob into the
 ### The build is complaining that some compiler builtins are missing. What do I do?
 
 Add `--link-builtins` to your `cargo ndk build` command and you should be happy.
+
+### I need to link `libc++_shared.so`
+
+Add `--link-cxx-shared` to your `cargo ndk build`.
 
 ## Supported hosts
 

@@ -3,6 +3,7 @@ use std::{env, path::PathBuf, process::Command};
 use clap::Parser;
 
 use crate::{
+    clang_target,
     cli::{HasCargoArgs, derive_adb_path, derive_ndk_path, derive_ndk_version, init},
     meta::Target,
 };
@@ -20,6 +21,10 @@ struct TestArgs {
     /// Links Clang builtins library
     #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_BUILTINS")]
     link_builtins: bool,
+
+    /// Links libc++_shared library
+    #[arg(long, default_value_t = false, env = "CARGO_NDK_LINK_CXX_SHARED")]
+    link_cxx_shared: bool,
 
     /// Path to Cargo.toml
     #[arg(long, value_name = "PATH")]
@@ -127,7 +132,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     // Set up environment for cargo test build
     let triple = target.triple();
-    let clang_target = crate::cargo::clang_target(triple, platform);
+    let clang_target = clang_target(triple, platform);
 
     let env_vars = crate::cargo::build_env(
         triple,
@@ -135,6 +140,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         &ndk_version,
         &clang_target,
         args.link_builtins,
+        args.link_cxx_shared,
     );
 
     shell.verbose(|shell| {

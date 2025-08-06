@@ -25,7 +25,7 @@ fn clang_linker_wrapper() -> ! {
     cmd.arg(target);
 
     if let Ok(builtins_path) = std::env::var("_CARGO_NDK_LDFLAGS") {
-        cmd.args(builtins_path.split("\0"));
+        cmd.args(builtins_path.split("\x1f"));
     }
 
     let mut child = cmd.args(args).spawn().unwrap_or_else(|err| {
