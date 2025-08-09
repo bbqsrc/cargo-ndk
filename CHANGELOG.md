@@ -1,5 +1,9 @@
 ## Changelog
 
+### v4.1.2 - 2025-08-09
+
+- Fix: some environment variables in `ndk-env` were incorrectly upper cased
+
 ### v4.1.1 - 2025-08-06
 
 - Fix: cleanup pointless debug logging (I am so bad at this)
