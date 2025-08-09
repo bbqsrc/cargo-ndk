@@ -86,7 +86,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         println!("#     cargo ndk-env --powershell | Invoke-Expression");
     } else {
         for (k, v) in env {
-            println!("export {}={:?}", k.to_uppercase().replace('-', "_"), v);
+            println!("export {}={:?}", k.replace('-', "_"), v);
         }
         println!();
         println!("# To import with bash/zsh/etc:");
