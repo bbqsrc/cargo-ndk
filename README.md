@@ -155,7 +155,7 @@ Add `--link-builtins` to your `cargo ndk build` command and you should be happy.
 
 ### I need to link `libc++_shared.so`
 
-Add `--link-cxx-shared` to your `cargo ndk build`.
+Add `--link-libcxx-shared` to your `cargo ndk build`.
 
 ## Supported hosts
 
