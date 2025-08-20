@@ -119,11 +119,12 @@ These can be overridden by command-line arguments.
 These environment variables are exported for use in build scripts and other downstream use cases:
 
 - `CARGO_NDK_ANDROID_PLATFORM`: the Android platform API number as an integer (e.g. `21`)
-- `CARGO_NDK_ANDROID_TARGET`: the Android name for the build target (e.g. `armeabi-v7a`)
 - `CARGO_NDK_OUTPUT_PATH`: the output path as specified with the `-o` flag
 - `CARGO_NDK_SYSROOT_PATH`: path to the sysroot inside the Android NDK
 - `CARGO_NDK_SYSROOT_TARGET`: the target name for the files inside the sysroot (differs slightly from the standard LLVM triples)
 - `CARGO_NDK_SYSROOT_LIBS_PATH`: path to the libraries inside the sysroot with the given sysroot target (e.g. `$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`)
+- `ANDROID_PLATFORM`: the platform version being used (e.g. `21`)
+- `ANDROID_ABI`: the "target triple" used in Android land (e.g. `armeabi-v7a`)
 
 Environment variables for bindgen are automatically configured and exported as well.
 
