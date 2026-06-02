@@ -126,6 +126,7 @@ These environment variables are exported for use in build scripts and other down
 | `CARGO_NDK_SYSROOT_PATH` | Path to the sysroot inside the Android NDK | `/path/to/ndk/toolchains/llvm/prebuilt/...` |
 | `CARGO_NDK_SYSROOT_TARGET` | The target name for files inside the sysroot (differs from LLVM triples) | `aarch64-linux-android` |
 | `CARGO_NDK_SYSROOT_LIBS_PATH` | Path to libraries in sysroot with target (`$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`) | `/path/to/ndk/.../usr/lib/aarch64-linux-android` |
+| `LIBCLANG_PATH` | Path containing the NDK's libclang shared library, when detected | `/path/to/ndk/toolchains/llvm/prebuilt/.../lib` |
 | `ANDROID_PLATFORM` | The platform version being used | `21` |
 | `ANDROID_ABI` | The Android ABI name | `armeabi-v7a` |
 

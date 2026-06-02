@@ -58,6 +58,48 @@ fn clang_lib_path(ndk_home: &Path) -> PathBuf {
         .join("linux")
 }
 
+#[inline]
+fn contains_libclang(path: &Path) -> bool {
+    std::fs::read_dir(path)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(|entry| entry.ok()))
+        .any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with("libclang."))
+        })
+}
+
+#[inline]
+fn libclang_search_suffixes() -> &'static [&'static str] {
+    if cfg!(target_env = "musl") {
+        &["musl/lib", "lib", "lib64", "bin"]
+    } else {
+        &["lib", "lib64", "bin", "musl/lib"]
+    }
+}
+
+#[inline]
+fn libclang_path_with_suffixes(ndk_home: &Path, suffixes: &[&str]) -> Option<PathBuf> {
+    let prebuilt_path = ndk_home
+        .join("toolchains")
+        .join("llvm")
+        .join("prebuilt")
+        .join(ARCH);
+
+    suffixes
+        .iter()
+        .map(|suffix| prebuilt_path.join(suffix))
+        .find(|path| contains_libclang(path))
+}
+
+#[inline]
+fn libclang_path(ndk_home: &Path) -> Option<PathBuf> {
+    libclang_path_with_suffixes(ndk_home, libclang_search_suffixes())
+}
+
 const CARGO_NDK_SYSROOT_PATH_KEY: &str = "CARGO_NDK_SYSROOT_PATH";
 const CARGO_NDK_SYSROOT_TARGET_KEY: &str = "CARGO_NDK_SYSROOT_TARGET";
 const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &str = "CARGO_NDK_SYSROOT_LIBS_PATH";
@@ -167,6 +209,10 @@ pub(crate) fn build_env(
     ]
     .into_iter()
     .collect::<BTreeMap<String, OsString>>();
+
+    if let Some(path) = libclang_path(ndk_home) {
+        envs.insert("LIBCLANG_PATH".to_string(), path.into_os_string());
+    }
 
     // cmd.arg(format!("-L{builtins_path}"));
 
@@ -370,11 +416,43 @@ fn append_target_args(
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsString, path::Path};
+    use std::{
+        ffi::OsString,
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use cargo_metadata::semver::Version;
 
-    use super::{append_target_args, build_env};
+    use crate::ARCH;
+
+    use super::{
+        append_target_args, build_env, libclang_path, libclang_path_with_suffixes,
+        libclang_search_suffixes,
+    };
+
+    fn temp_ndk_path(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before Unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("cargo-ndk-{name}-{nanos}"));
+        fs::remove_dir_all(&path).ok();
+        path
+    }
+
+    fn create_libclang_file(ndk_home: &Path, suffix: &str) -> PathBuf {
+        let path = ndk_home
+            .join("toolchains")
+            .join("llvm")
+            .join("prebuilt")
+            .join(ARCH)
+            .join(suffix);
+        fs::create_dir_all(&path).expect("failed to create fake libclang directory");
+        fs::write(path.join("libclang.so"), "").expect("failed to write fake libclang");
+        path
+    }
 
     #[test]
     fn build_env_exports_android_platform_and_abi() {
@@ -441,5 +519,82 @@ mod tests {
                 "json-render-diagnostics",
             ]
         );
+    }
+
+    #[test]
+    fn libclang_path_prefers_host_ndk_layout() {
+        let ndk_home = temp_ndk_path("host-libclang");
+        let host_path = create_libclang_file(&ndk_home, "lib");
+        let _fallback_path = create_libclang_file(&ndk_home, "musl/lib");
+
+        assert_eq!(libclang_path(&ndk_home), Some(host_path));
+
+        fs::remove_dir_all(ndk_home).ok();
+    }
+
+    #[test]
+    fn libclang_path_prefers_musl_layout_for_musl_hosts() {
+        let ndk_home = temp_ndk_path("musl-host-libclang");
+        let _host_path = create_libclang_file(&ndk_home, "lib");
+        let musl_path = create_libclang_file(&ndk_home, "musl/lib");
+
+        assert_eq!(
+            libclang_path_with_suffixes(&ndk_home, &["musl/lib", "lib", "lib64", "bin"]),
+            Some(musl_path)
+        );
+
+        fs::remove_dir_all(ndk_home).ok();
+    }
+
+    #[test]
+    fn libclang_path_falls_back_to_lib64_ndk_layout() {
+        let ndk_home = temp_ndk_path("lib64-libclang");
+        let fallback_path = create_libclang_file(&ndk_home, "lib64");
+
+        assert_eq!(libclang_path(&ndk_home), Some(fallback_path));
+
+        fs::remove_dir_all(ndk_home).ok();
+    }
+
+    #[test]
+    fn libclang_path_uses_musl_layout_as_last_resort() {
+        let ndk_home = temp_ndk_path("musl-libclang");
+        let fallback_path = create_libclang_file(&ndk_home, "musl/lib");
+
+        assert_eq!(libclang_path(&ndk_home), Some(fallback_path));
+
+        fs::remove_dir_all(ndk_home).ok();
+    }
+
+    #[test]
+    fn libclang_search_order_matches_host_abi() {
+        let suffixes = libclang_search_suffixes();
+
+        if cfg!(target_env = "musl") {
+            assert_eq!(suffixes[0], "musl/lib");
+        } else {
+            assert_eq!(suffixes[0], "lib");
+        }
+    }
+
+    #[test]
+    fn build_env_exports_libclang_path_when_detected() {
+        let ndk_home = temp_ndk_path("build-env-libclang");
+        let libclang_path = create_libclang_file(&ndk_home, "musl/lib");
+
+        let env = build_env(
+            "aarch64-linux-android",
+            &ndk_home,
+            &Version::new(28, 0, 0),
+            "--target=aarch64-linux-android28",
+            28,
+            "arm64-v8a",
+            false,
+            false,
+        );
+
+        assert_eq!(PathBuf::from(env["LIBCLANG_PATH"].clone()), libclang_path);
+
+        fs::remove_dir_all(ndk_home).ok();
     }
 }
