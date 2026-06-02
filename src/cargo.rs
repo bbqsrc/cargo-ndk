@@ -13,7 +13,7 @@ use cargo_metadata::{Artifact, Message, semver::Version};
 use crate::{ARCH, clang_target, ndk_tool, shell::Shell, sysroot_suffix, sysroot_target};
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
-    format!("CARGO_TARGET_{}_{}", &triple.replace('-', "_"), key).to_uppercase()
+    format!("CARGO_TARGET_{}_{}", triple.replace('-', "_"), key).to_uppercase()
 }
 
 #[inline]
@@ -100,7 +100,7 @@ pub(crate) fn build_env(
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
     let cargo_runner_key = cargo_env_target_cfg(triple, "runner");
-    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", &triple.replace('-', "_"));
+    let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", triple.replace('-', "_"));
 
     let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
     let target_cflags = match cflags_value {
@@ -123,8 +123,8 @@ pub(crate) fn build_env(
 
     let extra_include = format!(
         "{}/usr/include/{}",
-        &cargo_ndk_sysroot_path.display(),
-        &cargo_ndk_sysroot_target
+        cargo_ndk_sysroot_path.display(),
+        cargo_ndk_sysroot_target
     );
 
     let mut envs = [
@@ -218,7 +218,7 @@ pub(crate) fn build_env(
 
     let bindgen_args = format!(
         "--sysroot={} -I{}",
-        &cargo_ndk_sysroot_path.display(),
+        cargo_ndk_sysroot_path.display(),
         extra_include
     );
     let bindgen_clang_args = bindgen_args.replace('\\', "/");

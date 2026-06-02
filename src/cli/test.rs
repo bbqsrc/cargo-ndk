@@ -148,7 +148,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.verbose(|shell| {
         shell.status_with_color(
             "Building",
-            format!("test binary for {} ({})", &target, &triple),
+            format!("test binary for {} ({})", target, triple),
             termcolor::Color::Cyan,
         )
     })?;

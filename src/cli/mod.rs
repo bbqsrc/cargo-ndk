@@ -537,7 +537,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     shell.very_verbose(|shell| {
         shell.status_with_color(
             "Exporting",
-            format!("CARGO_NDK_CMAKE_TOOLCHAIN_PATH={:?}", &cmake_toolchain_path),
+            format!("CARGO_NDK_CMAKE_TOOLCHAIN_PATH={:?}", cmake_toolchain_path),
             termcolor::Color::Cyan,
         )
     })?;
@@ -619,12 +619,12 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         .into_iter()
         .map(|target| {
             let triple = target.triple();
-            shell.status("Building", format!("{} ({})", &target, &triple))?;
+            shell.status("Building", format!("{} ({})", target, triple))?;
 
             shell.very_verbose(|shell| {
                 shell.status_with_color(
                     "Exporting",
-                    format!("CARGO_NDK_ANDROID_PLATFORM={:?}", &target.to_string()),
+                    format!("CARGO_NDK_ANDROID_PLATFORM={:?}", target.to_string()),
                     termcolor::Color::Cyan,
                 )
             })?;
@@ -649,7 +649,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             shell.very_verbose(|shell| {
                 shell.status_with_color(
                     "Exporting",
-                    format!("ANDROID_ABI={:?}", &android_abi),
+                    format!("ANDROID_ABI={:?}", android_abi),
                     termcolor::Color::Cyan,
                 )
             })?;
@@ -737,10 +737,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                     shell.verbose(|shell| shell.status("Fresh", "libc++_shared.so"))?;
                 } else {
                     shell.verbose(|shell| {
-                        shell.status(
-                            "Copying",
-                            format!("libc++_shared.so -> {}", &dest.display()),
-                        )
+                        shell.status("Copying", format!("libc++_shared.so -> {}", dest.display()))
                     })?;
 
                     fs::copy(cargo_ndk_sysroot_libs_path.join("libc++_shared.so"), &dest)
@@ -778,7 +775,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 }
 
                 shell.verbose(|shell| {
-                    shell.status("Copying", format!("{file} -> {}", &dest.display()))
+                    shell.status("Copying", format!("{file} -> {}", dest.display()))
                 })?;
 
                 fs::copy(file, &dest)
