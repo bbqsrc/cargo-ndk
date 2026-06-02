@@ -10,6 +10,7 @@ use crate::{
 };
 
 #[derive(Debug, Parser, Clone)]
+#[command(name = "cargo-ndk-env")]
 struct EnvArgs {
     /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET")]
@@ -37,7 +38,7 @@ struct EnvArgs {
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
-    let (mut shell, args) = init(args)?;
+    let (mut shell, args) = init::<EnvArgs>(args)?;
     let args = EnvArgs::try_parse_from(args)?;
 
     let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {

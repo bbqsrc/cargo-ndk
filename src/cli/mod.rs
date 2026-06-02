@@ -13,7 +13,7 @@ use std::{
 
 use anyhow::Context;
 use cargo_metadata::{Artifact, CrateType, MetadataCommand, semver::Version};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use filetime::FileTime;
 
 use crate::{
@@ -37,6 +37,7 @@ impl CommandExt for Command {
 }
 
 #[derive(Debug, Parser, Clone)]
+#[command(name = "cargo-ndk")]
 struct BuildArgs {
     /// Triples for the target. Can be Rust or Android target names (i.e. arm64-v8a)
     #[arg(short, long, env = "CARGO_NDK_TARGET", value_delimiter = ',')]
@@ -376,18 +377,21 @@ impl StringVecExt for Vec<String> {
     }
 }
 
-fn init(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
+fn init<T>(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)>
+where
+    T: clap::CommandFactory,
+{
     if std::env::var_os("CARGO_NDK_NO_PANIC_HOOK").is_none() {
         std::panic::set_hook(Box::new(panic_hook));
     }
 
     if args.contains_str("--help") {
-        BuildArgs::command().print_long_help().unwrap();
+        T::command().print_long_help().unwrap();
         std::process::exit(0);
     }
 
     if args.contains_str("-h") {
-        BuildArgs::command().print_help().unwrap();
+        T::command().print_help().unwrap();
         std::process::exit(0);
     }
 
@@ -435,7 +439,7 @@ fn init(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     // Check for help/version before parsing to avoid required arg errors
-    let (mut shell, args) = init(args)?;
+    let (mut shell, args) = init::<BuildArgs>(args)?;
 
     let args = match parse_mixed_args::<BuildArgs>(args) {
         Ok(args) => args,
