@@ -34,13 +34,21 @@ struct EnvArgs {
     /// Print output in JSON format
     #[arg(long)]
     json: bool,
+
+    /// Use verbose output
+    #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
+    _verbose: u8,
+
+    /// Do not print status output
+    #[arg(short = 'q', long = "quiet")]
+    _quiet: bool,
 }
 
 pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     let (mut shell, args) = init(args)?;
     let args = EnvArgs::try_parse_from(args)?;
 
-    let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {
+    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
         Some((path, method)) => (path, method),
         None => {
             shell.error("Could not find any NDK.")?;
@@ -52,6 +60,19 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     };
 
     let ndk_version = derive_ndk_version(&ndk_home)?;
+    shell.verbose(|shell| {
+        shell.status_with_color(
+            "Detected",
+            format!(
+                "NDK v{} ({}) [{}]",
+                ndk_version,
+                ndk_home.display(),
+                ndk_detection_method
+            ),
+            termcolor::Color::Cyan,
+        )
+    })?;
+
     let clang_target = clang_target(args.target.triple(), args.platform);
 
     // Try command line, then config. Config falls back to defaults in any case.

@@ -396,7 +396,7 @@ fn init(args: Vec<String>) -> anyhow::Result<(Shell, Vec<String>)> {
         std::process::exit(0);
     }
 
-    let verbosity = if args.contains_str("-q") {
+    let verbosity = if args.contains_str("-q") || args.contains_str("--quiet") {
         Verbosity::Quiet
     } else if args.contains_str("-vv") {
         Verbosity::VeryVerbose
