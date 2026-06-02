@@ -121,6 +121,7 @@ These environment variables are exported for use in build scripts and other down
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `CARGO_NDK_ANDROID_PLATFORM` | The Android platform API number as an integer | `21` |
+| `CARGO_NDK_NDK_VERSION` | The detected Android NDK revision | `28.0.12433566` |
 | `CARGO_NDK_OUTPUT_PATH` | The output path as specified with the `-o` flag | `./jniLibs` |
 | `CARGO_NDK_SYSROOT_PATH` | Path to the sysroot inside the Android NDK | `/path/to/ndk/toolchains/llvm/prebuilt/...` |
 | `CARGO_NDK_SYSROOT_TARGET` | The target name for files inside the sysroot (differs from LLVM triples) | `aarch64-linux-android` |

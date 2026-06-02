@@ -61,6 +61,7 @@ fn clang_lib_path(ndk_home: &Path) -> PathBuf {
 const CARGO_NDK_SYSROOT_PATH_KEY: &str = "CARGO_NDK_SYSROOT_PATH";
 const CARGO_NDK_SYSROOT_TARGET_KEY: &str = "CARGO_NDK_SYSROOT_TARGET";
 const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &str = "CARGO_NDK_SYSROOT_LIBS_PATH";
+const CARGO_NDK_NDK_VERSION_KEY: &str = "CARGO_NDK_NDK_VERSION";
 
 fn is_64bit(triple: &str) -> bool {
     triple.starts_with("aarch64") || triple.starts_with("x86_64")
@@ -152,6 +153,10 @@ pub(crate) fn build_env(
         (
             "CARGO_NDK_ANDROID_PLATFORM".to_string(),
             platform.to_string().into(),
+        ),
+        (
+            CARGO_NDK_NDK_VERSION_KEY.to_string(),
+            ndk_version.to_string().into(),
         ),
         ("ANDROID_PLATFORM".to_string(), platform.to_string().into()),
         ("ANDROID_ABI".to_string(), android_abi.into()),
@@ -379,6 +384,7 @@ mod tests {
         );
 
         assert_eq!(env["CARGO_NDK_ANDROID_PLATFORM"], "28");
+        assert_eq!(env["CARGO_NDK_NDK_VERSION"], "28.0.0");
         assert_eq!(env["ANDROID_PLATFORM"], "28");
         assert_eq!(env["ANDROID_ABI"], "arm64-v8a");
     }
