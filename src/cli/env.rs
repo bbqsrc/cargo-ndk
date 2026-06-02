@@ -60,6 +60,8 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         &ndk_home,
         &ndk_version,
         &clang_target,
+        args.platform,
+        &args.target.to_string(),
         args.link_builtins,
         args.link_libcxx_shared,
     )

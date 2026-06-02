@@ -66,11 +66,14 @@ fn is_64bit(triple: &str) -> bool {
     triple.starts_with("aarch64") || triple.starts_with("x86_64")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_env(
     triple: &str,
     ndk_home: &Path,
     ndk_version: &Version,
     clang_target: &str,
+    platform: u8,
+    android_abi: &str,
     link_builtins: bool,
     link_cxx_shared: bool,
 ) -> BTreeMap<String, OsString> {
@@ -146,6 +149,12 @@ pub(crate) fn build_env(
             CARGO_NDK_SYSROOT_TARGET_KEY.to_string(),
             cargo_ndk_sysroot_target.into(),
         ),
+        (
+            "CARGO_NDK_ANDROID_PLATFORM".to_string(),
+            platform.to_string().into(),
+        ),
+        ("ANDROID_PLATFORM".to_string(), platform.to_string().into()),
+        ("ANDROID_ABI".to_string(), android_abi.into()),
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
         ("CLANG_PATH".into(), target_cc.clone().into()),
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
@@ -241,6 +250,7 @@ pub(crate) fn run(
     version: &Version,
     triple: &str,
     platform: u8,
+    android_abi: &str,
     link_builtins: bool,
     link_cxx_shared: bool,
     cargo_args: &[String],
@@ -260,6 +270,8 @@ pub(crate) fn run(
         ndk_home,
         version,
         &clang_target,
+        platform,
+        android_abi,
         link_builtins,
         link_cxx_shared,
     );
@@ -299,12 +311,10 @@ pub(crate) fn run(
     let mut cargo_args = cargo_args.to_vec();
 
     match dir.parent() {
-        Some(parent) => {
-            if parent != dir {
-                // log::debug!("Working directory does not match manifest-path");
-                cargo_args.push("--manifest-path".into());
-                cargo_args.push(cargo_manifest.into());
-            }
+        Some(parent) if parent != dir => {
+            // log::debug!("Working directory does not match manifest-path");
+            cargo_args.push("--manifest-path".into());
+            cargo_args.push(cargo_manifest.into());
         }
         _ => {
             // log::warn!("Parent of current working directory does not exist");
@@ -345,4 +355,31 @@ pub(crate) fn run(
     let status = child.wait().context("cargo crashed")?;
 
     Ok((status, artifacts))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use cargo_metadata::semver::Version;
+
+    use super::build_env;
+
+    #[test]
+    fn build_env_exports_android_platform_and_abi() {
+        let env = build_env(
+            "aarch64-linux-android",
+            Path::new("/opt/android-ndk"),
+            &Version::new(28, 0, 0),
+            "--target=aarch64-linux-android28",
+            28,
+            "arm64-v8a",
+            false,
+            false,
+        );
+
+        assert_eq!(env["CARGO_NDK_ANDROID_PLATFORM"], "28");
+        assert_eq!(env["ANDROID_PLATFORM"], "28");
+        assert_eq!(env["ANDROID_ABI"], "arm64-v8a");
+    }
 }

@@ -654,7 +654,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 )
             })?;
             unsafe {
-                std::env::set_var("ANDROID_ABI", android_abi);
+                std::env::set_var("ANDROID_ABI", &android_abi);
             }
 
             let (status, artifacts) = crate::cargo::run(
@@ -664,6 +664,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 &ndk_version,
                 triple,
                 platform,
+                &android_abi,
                 args.link_builtins,
                 args.link_libcxx_shared,
                 &args.cargo_args,
@@ -758,9 +759,15 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 .filter(|a| artifact_is_cdylib(a))
                 .filter(|a| a.package_id == current_package_id)
             {
-                let Some(file) = artifact.filenames.iter().find(|name| name.extension() == Some("so"))
+                let Some(file) = artifact
+                    .filenames
+                    .iter()
+                    .find(|name| name.extension() == Some("so"))
                 else {
-                    shell.error(format!("No cdylib file found to copy in\n{:#?}", artifact.filenames))?;
+                    shell.error(format!(
+                        "No cdylib file found to copy in\n{:#?}",
+                        artifact.filenames
+                    ))?;
                     std::process::exit(1);
                 };
                 let dest = arch_output_dir.join(file.file_name().unwrap());

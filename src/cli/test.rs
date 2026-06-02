@@ -139,6 +139,8 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         &ndk_home,
         &ndk_version,
         &clang_target,
+        platform,
+        &target.to_string(),
         args.link_builtins,
         args.link_cxx_shared,
     );
