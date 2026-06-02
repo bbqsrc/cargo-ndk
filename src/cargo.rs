@@ -310,22 +310,7 @@ pub(crate) fn run(
     let (cargo_args, subcommand_args) = cargo_args.split_at(mid);
     let mut cargo_args = cargo_args.to_vec();
 
-    match dir.parent() {
-        Some(parent) if parent != dir => {
-            // log::debug!("Working directory does not match manifest-path");
-            cargo_args.push("--manifest-path".into());
-            cargo_args.push(cargo_manifest.into());
-        }
-        _ => {
-            // log::warn!("Parent of current working directory does not exist");
-        }
-    }
-
-    cargo_args.push("--target".into());
-    cargo_args.push(triple.into());
-
-    cargo_args.push("--message-format".into());
-    cargo_args.push("json-render-diagnostics".into());
+    append_target_args(&mut cargo_args, dir, cargo_manifest, triple);
 
     cargo_cmd.args(&cargo_args);
 
@@ -357,13 +342,34 @@ pub(crate) fn run(
     Ok((status, artifacts))
 }
 
+fn append_target_args(
+    cargo_args: &mut Vec<OsString>,
+    dir: &Path,
+    cargo_manifest: &Path,
+    triple: &str,
+) {
+    if cargo_manifest
+        .parent()
+        .is_some_and(|manifest_dir| manifest_dir != dir)
+    {
+        cargo_args.push("--manifest-path".into());
+        cargo_args.push(cargo_manifest.into());
+    }
+
+    cargo_args.push("--target".into());
+    cargo_args.push(triple.into());
+
+    cargo_args.push("--message-format".into());
+    cargo_args.push("json-render-diagnostics".into());
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{ffi::OsString, path::Path};
 
     use cargo_metadata::semver::Version;
 
-    use super::build_env;
+    use super::{append_target_args, build_env};
 
     #[test]
     fn build_env_exports_android_platform_and_abi() {
@@ -381,5 +387,53 @@ mod tests {
         assert_eq!(env["CARGO_NDK_ANDROID_PLATFORM"], "28");
         assert_eq!(env["ANDROID_PLATFORM"], "28");
         assert_eq!(env["ANDROID_ABI"], "arm64-v8a");
+    }
+
+    #[test]
+    fn target_args_skip_manifest_path_for_current_package() {
+        let mut args = vec![OsString::from("build")];
+
+        append_target_args(
+            &mut args,
+            Path::new("/workspace/app"),
+            Path::new("/workspace/app/Cargo.toml"),
+            "aarch64-linux-android",
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "build",
+                "--target",
+                "aarch64-linux-android",
+                "--message-format",
+                "json-render-diagnostics",
+            ]
+        );
+    }
+
+    #[test]
+    fn target_args_include_manifest_path_for_different_package() {
+        let mut args = vec![OsString::from("build")];
+
+        append_target_args(
+            &mut args,
+            Path::new("/workspace"),
+            Path::new("/workspace/member/Cargo.toml"),
+            "aarch64-linux-android",
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "build",
+                "--manifest-path",
+                "/workspace/member/Cargo.toml",
+                "--target",
+                "aarch64-linux-android",
+                "--message-format",
+                "json-render-diagnostics",
+            ]
+        );
     }
 }
