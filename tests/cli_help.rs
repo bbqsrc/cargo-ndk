@@ -25,6 +25,7 @@ fn cargo_ndk_env_help_shows_env_format_options() {
         assert!(help.contains("Usage: cargo-ndk-env"));
         assert!(help.contains("--powershell"));
         assert!(help.contains("--json"));
+        assert!(help.contains("--include-internal"));
         assert!(!help.contains("--output-dir"));
     }
 }
