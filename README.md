@@ -152,6 +152,18 @@ Rust Analyzer and anything else with JSON-based environment handling:
 
 For configuring rust-analyzer, add the `--json` flag and paste the blob into the relevant place in the config.
 
+By default, `cargo ndk-env` omits cargo-ndk's internal linker wrapper variables from its output. If you want to source
+the generated environment and then build directly with Cargo using the exported linker configuration, add
+`--include-internal` so the linker wrapper receives its required metadata. Run this in a subshell, or unset the
+`_CARGO_NDK_*` variables before running `cargo ndk` again in the same shell:
+
+```
+(
+  source <(cargo ndk-env --target arm64-v8a --include-internal)
+  cargo build --target aarch64-linux-android
+)
+```
+
 ## Troubleshooting
 
 ### The build is complaining that some compiler builtins are missing. What do I do?
