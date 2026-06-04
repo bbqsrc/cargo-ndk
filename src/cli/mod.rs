@@ -755,11 +755,7 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
                 }
             }
 
-            for artifact in artifacts
-                .iter()
-                .filter(|a| artifact_is_cdylib(a))
-                .filter(|a| a.package_id == current_package_id)
-            {
+            for artifact in copyable_cdylib_artifacts(artifacts, &current_package_id) {
                 let Some(file) = artifact
                     .filenames
                     .iter()
@@ -824,6 +820,16 @@ fn artifact_is_cdylib(artifact: &Artifact) -> bool {
     artifact.target.crate_types.contains(&CrateType::CDyLib)
 }
 
+fn copyable_cdylib_artifacts<'a>(
+    artifacts: &'a [Artifact],
+    current_package_id: &'a cargo_metadata::PackageId,
+) -> impl Iterator<Item = &'a Artifact> + 'a {
+    artifacts
+        .iter()
+        .filter(|a| artifact_is_cdylib(a))
+        .filter(move |a| &a.package_id == current_package_id)
+}
+
 /// Check if the source file has changed and should be copied over to the destination path.
 #[inline]
 fn is_fresh(src: &Path, dest: &Path) -> anyhow::Result<bool> {
@@ -845,4 +851,68 @@ fn is_fresh(src: &Path, dest: &Path) -> anyhow::Result<bool> {
     };
 
     Ok(src <= dest)
+}
+
+#[cfg(test)]
+mod tests {
+    use cargo_metadata::Artifact;
+    use serde_json::json;
+
+    use super::copyable_cdylib_artifacts;
+
+    fn artifact(package_id: &str, crate_types: &[&str], filenames: &[&str]) -> Artifact {
+        serde_json::from_value(json!({
+            "package_id": package_id,
+            "manifest_path": format!("/workspace/{package_id}/Cargo.toml"),
+            "target": {
+                "kind": ["lib"],
+                "crate_types": crate_types,
+                "name": package_id,
+                "src_path": format!("/workspace/{package_id}/src/lib.rs"),
+                "edition": "2024",
+                "doc": true,
+                "doctest": true,
+                "test": true
+            },
+            "profile": {
+                "opt_level": "0",
+                "debuginfo": 0,
+                "debug_assertions": true,
+                "overflow_checks": true,
+                "test": false
+            },
+            "features": [],
+            "filenames": filenames,
+            "executable": null,
+            "fresh": false
+        }))
+        .expect("test artifact should deserialize")
+    }
+
+    #[test]
+    fn copyable_cdylib_artifacts_ignores_workspace_cdylibs_from_other_packages() {
+        let current = artifact(
+            "path+file:///workspace/app#0.1.0",
+            &["cdylib"],
+            &["target/libapp.so"],
+        );
+        let sibling_without_so = artifact(
+            "path+file:///workspace/helper#0.1.0",
+            &["cdylib"],
+            &["target/helper.dll"],
+        );
+        let sibling_with_so = artifact(
+            "path+file:///workspace/other#0.1.0",
+            &["cdylib"],
+            &["target/libother.so"],
+        );
+        let current_package_id = current.package_id.clone();
+        let artifacts = vec![sibling_without_so, sibling_with_so, current];
+
+        let selected = copyable_cdylib_artifacts(&artifacts, &current_package_id)
+            .map(|artifact| artifact.package_id.repr.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(selected, vec![current_package_id.repr.as_str()]);
+    }
 }
