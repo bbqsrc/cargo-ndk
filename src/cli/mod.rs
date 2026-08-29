@@ -4,7 +4,7 @@ pub mod test;
 
 use std::{
     ffi::OsString,
-    fs, io,
+    fs,
     panic::PanicHookInfo,
     path::{Path, PathBuf},
     process::Command,
@@ -12,15 +12,14 @@ use std::{
 };
 
 use anyhow::Context;
-use cargo_metadata::{Artifact, CrateType, MetadataCommand, semver::Version};
+use cargo_metadata::{Artifact, CrateType, MetadataCommand};
 use clap::Parser;
 use filetime::FileTime;
 
 use crate::{
-    ARCH,
+    Ndk,
     meta::{Target, default_targets},
     shell::{Shell, Verbosity},
-    sysroot_suffix, sysroot_target,
 };
 
 trait CommandExt {
@@ -68,26 +67,6 @@ struct BuildArgs {
     cargo_args: Vec<String>,
 }
 
-fn highest_version_ndk_in_path(ndk_dir: &Path) -> Option<PathBuf> {
-    if ndk_dir.exists() {
-        fs::read_dir(ndk_dir)
-            .ok()?
-            .filter_map(Result::ok)
-            .filter_map(|x| {
-                let path = x.path();
-                path.components()
-                    .next_back()
-                    .and_then(|comp| comp.as_os_str().to_str())
-                    .and_then(|name| Version::parse(name).ok())
-                    .map(|version| (version, path))
-            })
-            .max_by(|(a, _), (b, _)| a.cmp(b))
-            .map(|(_, path)| path)
-    } else {
-        None
-    }
-}
-
 /// Return the name and value of the first environment variable that is set
 ///
 /// Additionally checks that if any other variables are set then they should
@@ -114,63 +93,6 @@ fn find_first_consistent_var_set<'a>(
     }
 
     first_var_set
-}
-
-/// Return a path to a discovered NDK and string describing how it was found
-fn derive_ndk_path(shell: &mut Shell) -> Option<(PathBuf, String)> {
-    let ndk_vars = [
-        "ANDROID_NDK_HOME",
-        "ANDROID_NDK_ROOT",
-        "ANDROID_NDK_PATH",
-        "NDK_HOME",
-    ];
-    if let Some((var_name, path)) = find_first_consistent_var_set(&ndk_vars, shell) {
-        let path = PathBuf::from(path);
-        return highest_version_ndk_in_path(&path)
-            .or(Some(path))
-            .map(|path| (path, var_name.to_string()));
-    }
-
-    let sdk_vars = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_SDK_HOME"];
-    if let Some((var_name, sdk_path)) = find_first_consistent_var_set(&sdk_vars, shell) {
-        let ndk_path = PathBuf::from(&sdk_path).join("ndk");
-        if let Some(v) = highest_version_ndk_in_path(&ndk_path) {
-            return Some((v, var_name.to_string()));
-        }
-    }
-
-    let ndk_dir = default_ndk_dir();
-    highest_version_ndk_in_path(&ndk_dir).map(|path| (path, "standard location".to_string()))
-}
-
-fn default_ndk_dir() -> PathBuf {
-    #[cfg(windows)]
-    let dir = pathos::user::local_dir()
-        .unwrap()
-        .to_path_buf()
-        .join("Android")
-        .join("sdk")
-        .join("ndk");
-
-    #[cfg(target_os = "linux")]
-    let dir = pathos::xdg::home_dir()
-        .unwrap()
-        .join("Android")
-        .join("Sdk")
-        .join("ndk");
-
-    #[cfg(target_os = "macos")]
-    let dir = pathos::user::home_dir()
-        .unwrap()
-        .join("Library")
-        .join("Android")
-        .join("sdk")
-        .join("ndk");
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    let dir = PathBuf::new();
-
-    dir
 }
 
 /// Return a path to adb executable, resolving from ANDROID_HOME or ANDROID_SDK_ROOT
@@ -205,27 +127,35 @@ fn derive_adb_path(shell: &mut Shell) -> anyhow::Result<PathBuf> {
     ))
 }
 
-fn derive_ndk_version(path: &Path) -> anyhow::Result<Version> {
-    let data = fs::read_to_string(path.join("source.properties"))?;
-    for line in data.split('\n') {
-        if line.starts_with("Pkg.Revision") {
-            let mut chunks = line.split(" = ");
-            let _ = chunks.next().ok_or_else(|| io::Error::other("No chunk"))?;
-            let version = chunks.next().ok_or_else(|| io::Error::other("No chunk"))?;
-            let version = match Version::parse(version) {
-                Ok(v) => v,
-                Err(_e) => {
-                    return Err(anyhow::anyhow!(format!(
-                        "Could not parse NDK version. Got: '{}'",
-                        version
-                    )));
-                }
-            };
-            return Ok(version);
+pub(crate) fn discover_ndk(shell: &mut Shell) -> anyhow::Result<Option<Ndk>> {
+    let mut warning_error = None;
+    let ndk = Ndk::discover_with_warning(|warning| {
+        if warning_error.is_none() {
+            warning_error = shell.warn(warning).err();
         }
+    })?;
+
+    if let Some(error) = warning_error {
+        return Err(error);
     }
 
-    Err(anyhow::anyhow!("Could not find Pkg.Revision in given path"))
+    Ok(ndk)
+}
+
+pub(crate) fn cargo_ndk_executable_path() -> anyhow::Result<PathBuf> {
+    sibling_executable("cargo-ndk")
+}
+
+pub(crate) fn cargo_ndk_runner_path() -> anyhow::Result<PathBuf> {
+    sibling_executable("cargo-ndk-runner")
+}
+
+fn sibling_executable(name: &str) -> anyhow::Result<PathBuf> {
+    let current_executable = dunce::canonicalize(std::env::current_exe()?)?;
+    let parent = current_executable
+        .parent()
+        .context("current executable has no parent directory")?;
+    Ok(parent.join(name))
 }
 
 fn is_supported_rustc_version() -> bool {
@@ -468,25 +398,18 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     // We used to check for NDK_HOME, so we'll keep doing that. But we'll also try ANDROID_NDK_HOME
     // and $ANDROID_SDK_HOME/ndk as this is how Android Studio configures the world
-    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
-        Some((path, method)) => (path, method),
-        None => {
+    let ndk = match discover_ndk(&mut shell) {
+        Ok(Some(ndk)) => ndk,
+        Ok(None) => {
             shell.error("Could not find any NDK.")?;
             shell.note(
                 "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
             )?;
             std::process::exit(1);
         }
-    };
-
-    let ndk_version = match derive_ndk_version(&ndk_home) {
-        Ok(v) => v,
-        Err(e) => {
-            shell.error(format!(
-                "Error detecting NDK version for path {}",
-                ndk_home.display()
-            ))?;
-            shell.error(e)?;
+        Err(error) => {
+            shell.error("Failed to detect the Android NDK.")?;
+            shell.error(error)?;
             std::process::exit(1);
         }
     };
@@ -496,9 +419,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             "Detected",
             format!(
                 "NDK v{} ({}) [{}]",
-                ndk_version,
-                ndk_home.display(),
-                ndk_detection_method
+                ndk.version(),
+                ndk.path().display(),
+                ndk.source()
             ),
             termcolor::Color::Cyan,
         )
@@ -533,10 +456,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         })
         .unwrap_or_else(|| working_dir.join("Cargo.toml"));
 
-    let cmake_toolchain_path = ndk_home
-        .join("build")
-        .join("cmake")
-        .join("android.toolchain.cmake");
+    let cargo_ndk_path = cargo_ndk_executable_path()?;
+    let cargo_ndk_runner_path = cargo_ndk_runner_path()?;
+    let cmake_toolchain_path = ndk.cmake_toolchain_path();
 
     shell.very_verbose(|shell| {
         shell.status_with_color(
@@ -664,11 +586,11 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             let (status, artifacts) = crate::cargo::run(
                 &mut shell,
                 &working_dir,
-                &ndk_home,
-                &ndk_version,
-                triple,
+                &ndk,
+                target,
                 platform,
-                &android_abi,
+                &cargo_ndk_path,
+                &cargo_ndk_runner_path,
                 args.link_builtins,
                 args.link_libcxx_shared,
                 &args.cargo_args,
@@ -729,8 +651,8 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             }
 
             if args.link_libcxx_shared {
-                let cargo_ndk_sysroot_path = ndk_home.join(sysroot_suffix(ARCH));
-                let cargo_ndk_sysroot_target = sysroot_target(target.triple());
+                let cargo_ndk_sysroot_path = ndk.sysroot();
+                let cargo_ndk_sysroot_target = target.sysroot_target();
                 let cargo_ndk_sysroot_libs_path = cargo_ndk_sysroot_path
                     .join("usr")
                     .join("lib")

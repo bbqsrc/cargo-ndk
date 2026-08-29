@@ -3,9 +3,8 @@ use std::{collections::BTreeMap, ffi::OsString};
 use clap::Parser;
 
 use crate::{
-    cargo::build_env,
-    clang_target,
-    cli::{derive_ndk_path, derive_ndk_version, init},
+    ApiLevel, BuildConfig,
+    cli::{cargo_ndk_executable_path, cargo_ndk_runner_path, discover_ndk, init},
     meta::Target,
 };
 
@@ -72,34 +71,26 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     let (mut shell, args) = init::<EnvArgs>(args)?;
     let args = EnvArgs::try_parse_from(args)?;
 
-    let (ndk_home, _ndk_detection_method) = match derive_ndk_path(&mut shell) {
-        Some((path, method)) => (path, method),
-        None => {
+    let ndk = match discover_ndk(&mut shell) {
+        Ok(Some(ndk)) => ndk,
+        Ok(None) => {
             shell.error("Could not find any NDK.")?;
             shell.note(
                 "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
             )?;
             std::process::exit(1);
         }
+        Err(error) => return Err(error),
     };
 
-    let ndk_version = derive_ndk_version(&ndk_home)?;
-    let clang_target = clang_target(args.target.triple(), args.platform);
+    let config = BuildConfig::new(ndk, args.target, ApiLevel::new(args.platform))
+        .with_linker(cargo_ndk_executable_path()?)
+        .with_runner(cargo_ndk_runner_path()?)
+        .with_link_builtins(args.link_builtins)
+        .with_link_cxx_shared(args.link_libcxx_shared);
 
     // Try command line, then config. Config falls back to defaults in any case.
-    let env = filter_env(
-        build_env(
-            args.target.triple(),
-            &ndk_home,
-            &ndk_version,
-            &clang_target,
-            args.platform,
-            &args.target.to_string(),
-            args.link_builtins,
-            args.link_libcxx_shared,
-        ),
-        args.include_internal,
-    );
+    let env = filter_env(config.environment()?.into_map(), args.include_internal);
 
     if args.json {
         println!(

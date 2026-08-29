@@ -17,6 +17,7 @@ This cargo extension handles all the environment configuration needed for succes
 - [Installing](#installing)
 - [Examples](#examples)
   - [Building a library for 32-bit and 64-bit ARM systems](#building-a-library-for-32-bit-and-64-bit-arm-systems)
+- [Using cargo-ndk as a library](#using-cargo-ndk-as-a-library)
 - [Usage](#usage)
   - [Using `cargo run` binaries via adb](#using-cargo-run-binaries-via-adb)
   - [Running your tests on an Android device](#running-your-tests-on-an-android-device)
@@ -70,6 +71,54 @@ This specifies the Android targets to be built (ordinary triples are also suppor
 expected by Android, and then the ordinary flags to be passed to `cargo`.
 
 ![Example](./example/example.svg)
+
+## Using `cargo-ndk` as a library
+
+Build tools such as an `xtask` can depend on `cargo-ndk` directly and keep
+ownership of the Cargo process. The configuration below makes the current
+`xtask` executable the linker wrapper, so no separate `cargo-ndk` executable is
+needed beside it:
+
+```toml
+[dependencies]
+cargo-ndk = "4"
+```
+
+```rust,no_run
+use std::process::Command;
+
+use cargo_ndk::{AndroidTarget, ApiLevel, BuildConfig, Ndk};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Put this before the normal xtask dispatch. Cargo invokes the same
+    // executable again when it needs to link the Android target.
+    if std::env::var_os("_CARGO_NDK_LINK_TARGET").is_some() {
+        let status = cargo_ndk::run_linker_wrapper()?;
+        std::process::exit(status.code().unwrap_or(1));
+    }
+
+    let ndk = Ndk::discover()?
+        .ok_or_else(|| std::io::Error::other("Android NDK was not found"))?;
+    let target = AndroidTarget::Arm64V8a;
+    let config = BuildConfig::new(ndk, target, ApiLevel::new(28));
+
+    let mut cargo = Command::new("cargo");
+    cargo.args(["build", "--target", target.triple()]);
+    config.configure_command(&mut cargo)?;
+    let status = cargo.status()?;
+    if !status.success() {
+        return Err(format!("cargo exited with {status}").into());
+    }
+
+    Ok(())
+}
+```
+
+`BuildConfig` only adapts Cargo to the Android NDK; the caller still chooses
+the Cargo command and owns its process lifecycle. Add
+`.with_runner(...)` when the Cargo command also needs a target runner.
+Configurations for NDK releases older than r23 return an error; the CLI then
+formats that error according to its normal output policy.
 
 ## Usage
 
@@ -126,6 +175,7 @@ These environment variables are exported for use in build scripts and other down
 | `CARGO_NDK_SYSROOT_PATH` | Path to the sysroot inside the Android NDK | `/path/to/ndk/toolchains/llvm/prebuilt/...` |
 | `CARGO_NDK_SYSROOT_TARGET` | The target name for files inside the sysroot (differs from LLVM triples) | `aarch64-linux-android` |
 | `CARGO_NDK_SYSROOT_LIBS_PATH` | Path to libraries in sysroot with target (`$CARGO_NDK_SYSROOT_PATH/usr/lib/$CARGO_NDK_SYSROOT_TARGET`) | `/path/to/ndk/.../usr/lib/aarch64-linux-android` |
+| `CARGO_NDK_CMAKE_TOOLCHAIN_PATH` | Path to the NDK CMake toolchain file | `/path/to/ndk/build/cmake/android.toolchain.cmake` |
 | `LIBCLANG_PATH` | Path containing the NDK's libclang shared library, when detected | `/path/to/ndk/toolchains/llvm/prebuilt/.../lib` |
 | `ANDROID_PLATFORM` | The platform version being used | `21` |
 | `ANDROID_ABI` | The Android ABI name | `armeabi-v7a` |
@@ -151,6 +201,8 @@ cargo ndk-env --powershell | Invoke-Expression
 Rust Analyzer and anything else with JSON-based environment handling:
 
 For configuring rust-analyzer, add the `--json` flag and paste the blob into the relevant place in the config.
+The generated environment also includes `CARGO_NDK_CMAKE_TOOLCHAIN_PATH` for
+build scripts that need the NDK CMake toolchain file.
 
 By default, `cargo ndk-env` omits cargo-ndk's internal linker wrapper variables from its output. If you want to source
 the generated environment and then build directly with Cargo using the exported linker configuration, add

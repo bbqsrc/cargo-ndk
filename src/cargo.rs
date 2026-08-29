@@ -1,16 +1,16 @@
 use std::{
     collections::BTreeMap,
     env,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::BufReader,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
 use anyhow::{Context, Result};
-use cargo_metadata::{Artifact, Message, semver::Version};
+use cargo_metadata::{Artifact, Message};
 
-use crate::{ARCH, clang_target, ndk_tool, shell::Shell, sysroot_suffix, sysroot_target};
+use crate::{ApiLevel, Target, ndk::Ndk, shell::Shell};
 
 fn cargo_env_target_cfg(triple: &str, key: &str) -> String {
     format!("CARGO_TARGET_{}_{}", triple.replace('-', "_"), key).to_uppercase()
@@ -36,26 +36,26 @@ fn cc_env(var_base: &str, triple: &str) -> (String, Option<String>) {
 
 // {}/toolchains/llvm/prebuilt/{ARCH}/lib/clang/{clang_version}/lib/linux
 #[inline]
-fn clang_lib_path(ndk_home: &Path) -> PathBuf {
+fn clang_lib_path(ndk_home: &Path) -> Result<PathBuf> {
     let clang_folder: PathBuf = ndk_home
         .join("toolchains")
         .join("llvm")
         .join("prebuilt")
-        .join(ARCH)
+        .join(crate::ARCH)
         .join("lib")
         .join("clang");
 
     let clang_lib_version = std::fs::read_dir(&clang_folder)
-        .expect("Unable to get clang target directory")
+        .context("unable to get clang target directory")?
         .filter_map(|a| a.ok())
         .max_by(|a, b| a.file_name().cmp(&b.file_name()))
-        .expect("Unable to get clang target")
+        .context("unable to get clang target")?
         .path();
 
-    clang_folder
+    Ok(clang_folder
         .join(clang_lib_version)
         .join("lib")
-        .join("linux")
+        .join("linux"))
 }
 
 #[inline]
@@ -87,7 +87,7 @@ fn libclang_path_with_suffixes(ndk_home: &Path, suffixes: &[&str]) -> Option<Pat
         .join("toolchains")
         .join("llvm")
         .join("prebuilt")
-        .join(ARCH);
+        .join(crate::ARCH);
 
     suffixes
         .iter()
@@ -104,32 +104,133 @@ const CARGO_NDK_SYSROOT_PATH_KEY: &str = "CARGO_NDK_SYSROOT_PATH";
 const CARGO_NDK_SYSROOT_TARGET_KEY: &str = "CARGO_NDK_SYSROOT_TARGET";
 const CARGO_NDK_SYSROOT_LIBS_PATH_KEY: &str = "CARGO_NDK_SYSROOT_LIBS_PATH";
 const CARGO_NDK_NDK_VERSION_KEY: &str = "CARGO_NDK_NDK_VERSION";
+const CARGO_NDK_CMAKE_TOOLCHAIN_PATH_KEY: &str = "CARGO_NDK_CMAKE_TOOLCHAIN_PATH";
 
-fn is_64bit(triple: &str) -> bool {
-    triple.starts_with("aarch64") || triple.starts_with("x86_64")
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn build_env(
-    triple: &str,
-    ndk_home: &Path,
-    ndk_version: &Version,
-    clang_target: &str,
-    platform: u8,
-    android_abi: &str,
+/// Configuration for adapting a Cargo command to an Android NDK toolchain.
+///
+/// The default linker is the current executable. This makes an executable
+/// embedding `cargo-ndk` able to act as its own linker wrapper by dispatching
+/// linker invocations to [`crate::run_linker_wrapper`]. Use [`Self::with_linker`]
+/// when the wrapper lives in a different executable.
+#[derive(Debug, Clone)]
+pub struct BuildConfig {
+    ndk: Ndk,
+    target: Target,
+    api_level: ApiLevel,
+    linker: Option<PathBuf>,
+    runner: Option<PathBuf>,
     link_builtins: bool,
     link_cxx_shared: bool,
-) -> BTreeMap<String, OsString> {
-    let cargo_ndk_path = dunce::canonicalize(env::args().next().unwrap())
-        .expect("Failed to canonicalize absolute path to cargo-ndk")
-        .parent()
-        .unwrap()
-        .join("cargo-ndk");
-    let cargo_ndk_runner_path = dunce::canonicalize(env::args().next().unwrap())
-        .expect("Failed to canonicalize absolute path to cargo-ndk-runner")
-        .parent()
-        .unwrap()
-        .join("cargo-ndk-runner");
+}
+
+impl BuildConfig {
+    /// Creates a build configuration for one Android target.
+    pub fn new(ndk: Ndk, target: Target, api_level: impl Into<ApiLevel>) -> Self {
+        Self {
+            ndk,
+            target,
+            api_level: api_level.into(),
+            linker: None,
+            runner: None,
+            link_builtins: false,
+            link_cxx_shared: false,
+        }
+    }
+
+    /// Sets the executable Cargo should invoke as the target linker.
+    pub fn with_linker(mut self, linker: impl Into<PathBuf>) -> Self {
+        self.linker = Some(linker.into());
+        self
+    }
+
+    /// Sets an optional Cargo target runner, for example an adb-based runner.
+    pub fn with_runner(mut self, runner: impl Into<PathBuf>) -> Self {
+        self.runner = Some(runner.into());
+        self
+    }
+
+    /// Enables linking compiler builtins from the NDK.
+    pub fn with_link_builtins(mut self, enabled: bool) -> Self {
+        self.link_builtins = enabled;
+        self
+    }
+
+    /// Enables linking `libc++_shared`.
+    pub fn with_link_cxx_shared(mut self, enabled: bool) -> Self {
+        self.link_cxx_shared = enabled;
+        self
+    }
+
+    /// Returns the generated environment without starting Cargo.
+    pub fn environment(&self) -> Result<BuildEnvironment> {
+        build_environment(self)
+    }
+
+    /// Applies the NDK environment to a Cargo command.
+    pub fn configure_command(&self, command: &mut Command) -> Result<()> {
+        self.environment()?.apply_to(command);
+        Ok(())
+    }
+
+    /// Returns the target selected by this configuration.
+    pub fn target(&self) -> Target {
+        self.target
+    }
+
+    /// Returns the Android API level selected by this configuration.
+    pub fn api_level(&self) -> ApiLevel {
+        self.api_level
+    }
+
+    /// Returns the NDK used by this configuration.
+    pub fn ndk(&self) -> &Ndk {
+        &self.ndk
+    }
+}
+
+/// Environment variables generated for one Android Cargo build.
+#[derive(Debug, Clone)]
+pub struct BuildEnvironment {
+    variables: BTreeMap<String, OsString>,
+}
+
+impl BuildEnvironment {
+    /// Gets a generated value by environment variable name.
+    pub fn get(&self, key: &str) -> Option<&OsStr> {
+        self.variables.get(key).map(OsString::as_os_str)
+    }
+
+    /// Iterates over generated environment variables without exposing storage ownership.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &OsStr)> {
+        self.variables
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_os_str()))
+    }
+
+    /// Applies all generated variables to a command.
+    pub fn apply_to(&self, command: &mut Command) {
+        for (key, value) in &self.variables {
+            command.env(key, value);
+        }
+    }
+
+    pub(crate) fn into_map(self) -> BTreeMap<String, OsString> {
+        self.variables
+    }
+}
+
+fn build_environment(config: &BuildConfig) -> Result<BuildEnvironment> {
+    config.ndk.ensure_supported()?;
+
+    let ndk_home = config.ndk.path();
+    let ndk_version = config.ndk.version();
+    let target = config.target;
+    let triple = target.triple();
+    let clang_target = target.clang_target(config.api_level);
+    let linker = match &config.linker {
+        Some(linker) => linker.clone(),
+        None => env::current_exe().context("failed to resolve the current executable")?,
+    };
 
     // Environment variables for the `cc` crate
     let (cc_key, _) = cc_env("CC", triple);
@@ -142,27 +243,26 @@ pub(crate) fn build_env(
     // Environment variables for cargo
     let cargo_ar_key = cargo_env_target_cfg(triple, "ar");
     let cargo_linker_key = cargo_env_target_cfg(triple, "linker");
-    let cargo_runner_key = cargo_env_target_cfg(triple, "runner");
     let bindgen_clang_args_key = format!("BINDGEN_EXTRA_CLANG_ARGS_{}", triple.replace('-', "_"));
 
-    let target_cc = ndk_home.join(ndk_tool(ARCH, "clang"));
+    let target_cc = config.ndk.tool("clang");
     let target_cflags = match cflags_value {
         Some(v) => format!("{clang_target} {v}"),
         None => clang_target.to_string(),
     };
-    let target_cxx = ndk_home.join(ndk_tool(ARCH, "clang++"));
+    let target_cxx = config.ndk.tool("clang++");
     let target_cxxflags = match cxxflags_value {
         Some(v) => format!("{clang_target} {v}"),
         None => clang_target.to_string(),
     };
-    let cargo_ndk_sysroot_path = ndk_home.join(sysroot_suffix(ARCH));
-    let cargo_ndk_sysroot_target = sysroot_target(triple);
+    let cargo_ndk_sysroot_path = config.ndk.sysroot();
+    let cargo_ndk_sysroot_target = target.sysroot_target();
     let cargo_ndk_sysroot_libs_path = cargo_ndk_sysroot_path
         .join("usr")
         .join("lib")
         .join(cargo_ndk_sysroot_target);
-    let target_ar = ndk_home.join(ndk_tool(ARCH, "llvm-ar"));
-    let target_ranlib = ndk_home.join(ndk_tool(ARCH, "llvm-ranlib"));
+    let target_ar = config.ndk.tool("llvm-ar");
+    let target_ranlib = config.ndk.tool("llvm-ranlib");
 
     let extra_include = format!(
         "{}/usr/include/{}",
@@ -178,8 +278,7 @@ pub(crate) fn build_env(
         (ar_key, target_ar.clone().into()),
         (ranlib_key, target_ranlib.into_os_string()),
         (cargo_ar_key, target_ar.into_os_string()),
-        (cargo_linker_key, cargo_ndk_path.into_os_string()),
-        (cargo_runner_key, cargo_ndk_runner_path.into_os_string()),
+        (cargo_linker_key, linker.into_os_string()),
         (
             CARGO_NDK_SYSROOT_PATH_KEY.to_string(),
             cargo_ndk_sysroot_path.clone().into_os_string(),
@@ -194,14 +293,21 @@ pub(crate) fn build_env(
         ),
         (
             "CARGO_NDK_ANDROID_PLATFORM".to_string(),
-            platform.to_string().into(),
+            config.api_level.to_string().into(),
         ),
         (
             CARGO_NDK_NDK_VERSION_KEY.to_string(),
             ndk_version.to_string().into(),
         ),
-        ("ANDROID_PLATFORM".to_string(), platform.to_string().into()),
-        ("ANDROID_ABI".to_string(), android_abi.into()),
+        (
+            CARGO_NDK_CMAKE_TOOLCHAIN_PATH_KEY.to_string(),
+            config.ndk.cmake_toolchain_path().into_os_string(),
+        ),
+        (
+            "ANDROID_PLATFORM".to_string(),
+            config.api_level.to_string().into(),
+        ),
+        ("ANDROID_ABI".to_string(), target.abi().into()),
         // https://github.com/KyleMayes/clang-sys?tab=readme-ov-file#environment-variables
         ("CLANG_PATH".into(), target_cc.clone().into()),
         ("_CARGO_NDK_LINK_TARGET".into(), clang_target.into()), // Recognized by main() so we know when we're acting as a wrapper
@@ -209,6 +315,13 @@ pub(crate) fn build_env(
     ]
     .into_iter()
     .collect::<BTreeMap<String, OsString>>();
+
+    if let Some(runner) = &config.runner {
+        envs.insert(
+            cargo_env_target_cfg(triple, "runner"),
+            runner.clone().into_os_string(),
+        );
+    }
 
     if let Some(path) = libclang_path(ndk_home) {
         envs.insert("LIBCLANG_PATH".to_string(), path.into_os_string());
@@ -224,28 +337,28 @@ pub(crate) fn build_env(
 
     let mut ldflags = vec![];
 
-    if link_builtins {
-        let builtins_path = clang_lib_path(ndk_home);
+    if config.link_builtins {
+        let builtins_path = clang_lib_path(ndk_home)?;
 
         ldflags.push(format!("-L{}", builtins_path.display()));
         ldflags.push(format!(
             "-lclang_rt.builtins-{}-android",
-            sysroot_target(triple).split('-').next().unwrap()
+            target.sysroot_target().split('-').next().unwrap()
         ));
     }
 
-    if link_cxx_shared {
+    if config.link_cxx_shared {
         ldflags.push("-lc++_shared".to_string());
     }
 
     // 64-bit android requires 16kb pages now. It is the default for NDK r28+.
     // https://developer.android.com/guide/practices/page-sizes
-    if is_64bit(triple) {
-        if ndk_version.major <= 27 {
+    if target.is_64_bit() {
+        if ndk_version.major() <= 27 {
             ldflags.push("-Wl,-z,max-page-size=16384".to_string());
         }
 
-        if ndk_version.major <= 22 {
+        if ndk_version.major() <= 22 {
             ldflags.push("-Wl,-z,common-page-size=16384".to_string());
         }
     }
@@ -279,13 +392,13 @@ pub(crate) fn build_env(
         bindgen_clang_args.into(),
     );
 
-    envs
+    Ok(BuildEnvironment { variables: envs })
 }
 
 /// Note: considering that there is an upstream quoting bug in the clang .cmd
 /// wrappers on Windows we intentionally avoid any wrapper scripts and
 /// instead pass a `--target=<triple><api_level>` argument to clang by using
-/// cargo-ndk itself as a linker wrapper.
+/// the configured executable as a linker wrapper.
 ///
 /// See: https://github.com/android/ndk/issues/1856
 ///
@@ -297,35 +410,32 @@ pub(crate) fn build_env(
 pub(crate) fn run(
     shell: &mut Shell,
     dir: &Path,
-    ndk_home: &Path,
-    version: &Version,
-    triple: &str,
+    ndk: &Ndk,
+    target: Target,
     platform: u8,
-    android_abi: &str,
+    linker: &Path,
+    runner: &Path,
     link_builtins: bool,
     link_cxx_shared: bool,
     cargo_args: &[String],
     cargo_manifest: &Path,
 ) -> Result<(std::process::ExitStatus, Vec<Artifact>)> {
-    if version.major < 23 {
-        shell.error("NDK versions less than r23 are not supported. Install an up-to-date version of the NDK.").unwrap();
-        std::process::exit(1);
-    }
-
     let cargo_args: Vec<OsString> = cargo_args.iter().map(Into::into).collect();
-    let clang_target = clang_target(triple, platform);
+    let triple = target.triple();
     let cargo_bin = env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cargo_cmd = Command::new(&cargo_bin);
-    let envs = build_env(
-        triple,
-        ndk_home,
-        version,
-        &clang_target,
-        platform,
-        android_abi,
-        link_builtins,
-        link_cxx_shared,
-    );
+    let config = BuildConfig::new(ndk.clone(), target, ApiLevel::new(platform))
+        .with_linker(linker.to_path_buf())
+        .with_runner(runner.to_path_buf())
+        .with_link_builtins(link_builtins)
+        .with_link_cxx_shared(link_cxx_shared);
+    let envs = match config.environment() {
+        Ok(envs) => envs,
+        Err(error) => {
+            shell.error(error)?;
+            std::process::exit(1);
+        }
+    };
 
     shell
         .very_verbose(|shell| {
@@ -345,7 +455,8 @@ pub(crate) fn run(
         })
         .unwrap();
 
-    cargo_cmd.current_dir(dir).envs(envs);
+    cargo_cmd.current_dir(dir);
+    envs.apply_to(&mut cargo_cmd);
 
     let cargo_args = if !cargo_args.is_empty() && cargo_args[0].as_os_str() == "--" {
         &cargo_args[1..]
@@ -417,19 +528,16 @@ fn append_target_args(
 #[cfg(test)]
 mod tests {
     use std::{
-        ffi::OsString,
+        ffi::{OsStr, OsString},
         fs,
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use cargo_metadata::semver::Version;
-
-    use crate::ARCH;
+    use crate::{ARCH, ApiLevel, BuildConfig, Ndk, Target};
 
     use super::{
-        append_target_args, build_env, libclang_path, libclang_path_with_suffixes,
-        libclang_search_suffixes,
+        append_target_args, libclang_path, libclang_path_with_suffixes, libclang_search_suffixes,
     };
 
     fn temp_ndk_path(name: &str) -> PathBuf {
@@ -454,23 +562,36 @@ mod tests {
         path
     }
 
+    fn create_ndk(ndk_home: &Path) -> Ndk {
+        fs::create_dir_all(ndk_home).expect("failed to create fake NDK directory");
+        fs::write(
+            ndk_home.join("source.properties"),
+            "Pkg.Revision = 28.0.12433566\n",
+        )
+        .expect("failed to write fake NDK metadata");
+        Ndk::from_path(ndk_home).expect("fake NDK should load")
+    }
+
     #[test]
     fn build_env_exports_android_platform_and_abi() {
-        let env = build_env(
-            "aarch64-linux-android",
-            Path::new("/opt/android-ndk"),
-            &Version::new(28, 0, 0),
-            "--target=aarch64-linux-android28",
-            28,
-            "arm64-v8a",
-            false,
-            false,
-        );
+        let ndk_home = temp_ndk_path("build-env-platform");
+        let env = BuildConfig::new(create_ndk(&ndk_home), Target::Arm64V8a, ApiLevel::new(28))
+            .with_linker("/cargo-ndk")
+            .environment()
+            .expect("environment should be generated");
 
-        assert_eq!(env["CARGO_NDK_ANDROID_PLATFORM"], "28");
-        assert_eq!(env["CARGO_NDK_NDK_VERSION"], "28.0.0");
-        assert_eq!(env["ANDROID_PLATFORM"], "28");
-        assert_eq!(env["ANDROID_ABI"], "arm64-v8a");
+        assert_eq!(
+            env.get("CARGO_NDK_ANDROID_PLATFORM"),
+            Some(OsStr::new("28"))
+        );
+        assert_eq!(
+            env.get("CARGO_NDK_NDK_VERSION"),
+            Some(OsStr::new("28.0.12433566"))
+        );
+        assert_eq!(env.get("ANDROID_PLATFORM"), Some(OsStr::new("28")));
+        assert_eq!(env.get("ANDROID_ABI"), Some(OsStr::new("arm64-v8a")));
+
+        fs::remove_dir_all(ndk_home).ok();
     }
 
     #[test]
@@ -527,7 +648,7 @@ mod tests {
         let host_path = create_libclang_file(&ndk_home, "lib");
         let _fallback_path = create_libclang_file(&ndk_home, "musl/lib");
 
-        assert_eq!(libclang_path(&ndk_home), Some(host_path));
+        assert_eq!(libclang_path(&ndk_home).unwrap(), host_path);
 
         fs::remove_dir_all(ndk_home).ok();
     }
@@ -551,7 +672,7 @@ mod tests {
         let ndk_home = temp_ndk_path("lib64-libclang");
         let fallback_path = create_libclang_file(&ndk_home, "lib64");
 
-        assert_eq!(libclang_path(&ndk_home), Some(fallback_path));
+        assert_eq!(libclang_path(&ndk_home).unwrap(), fallback_path);
 
         fs::remove_dir_all(ndk_home).ok();
     }
@@ -561,7 +682,7 @@ mod tests {
         let ndk_home = temp_ndk_path("musl-libclang");
         let fallback_path = create_libclang_file(&ndk_home, "musl/lib");
 
-        assert_eq!(libclang_path(&ndk_home), Some(fallback_path));
+        assert_eq!(libclang_path(&ndk_home).unwrap(), fallback_path);
 
         fs::remove_dir_all(ndk_home).ok();
     }
@@ -580,20 +701,18 @@ mod tests {
     #[test]
     fn build_env_exports_libclang_path_when_detected() {
         let ndk_home = temp_ndk_path("build-env-libclang");
+        let ndk = create_ndk(&ndk_home);
         let libclang_path = create_libclang_file(&ndk_home, "musl/lib");
 
-        let env = build_env(
-            "aarch64-linux-android",
-            &ndk_home,
-            &Version::new(28, 0, 0),
-            "--target=aarch64-linux-android28",
-            28,
-            "arm64-v8a",
-            false,
-            false,
-        );
+        let env = BuildConfig::new(ndk, Target::Arm64V8a, ApiLevel::new(28))
+            .with_linker("/cargo-ndk")
+            .environment()
+            .expect("environment should be generated");
 
-        assert_eq!(PathBuf::from(env["LIBCLANG_PATH"].clone()), libclang_path);
+        assert_eq!(
+            PathBuf::from(env.get("LIBCLANG_PATH").unwrap()),
+            libclang_path
+        );
 
         fs::remove_dir_all(ndk_home).ok();
     }

@@ -3,8 +3,11 @@ use std::{env, path::PathBuf, process::Command};
 use clap::Parser;
 
 use crate::{
-    clang_target,
-    cli::{HasCargoArgs, derive_adb_path, derive_ndk_path, derive_ndk_version, init},
+    ApiLevel, BuildConfig,
+    cli::{
+        HasCargoArgs, cargo_ndk_executable_path, cargo_ndk_runner_path, derive_adb_path,
+        discover_ndk, init,
+    },
     meta::Target,
 };
 
@@ -91,25 +94,18 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
     })?;
 
     // Get NDK path for building
-    let (ndk_home, ndk_detection_method) = match derive_ndk_path(&mut shell) {
-        Some((path, method)) => (path, method),
-        None => {
+    let ndk = match discover_ndk(&mut shell) {
+        Ok(Some(ndk)) => ndk,
+        Ok(None) => {
             shell.error("Could not find any NDK.")?;
             shell.note(
                 "Set the environment ANDROID_NDK_HOME to your NDK installation's root directory,\nor install the NDK using Android Studio."
             )?;
             std::process::exit(1);
         }
-    };
-
-    let ndk_version = match derive_ndk_version(&ndk_home) {
-        Ok(v) => v,
-        Err(e) => {
-            shell.error(format!(
-                "Error detecting NDK version for path {}",
-                ndk_home.display()
-            ))?;
-            shell.error(e)?;
+        Err(error) => {
+            shell.error("Failed to detect the Android NDK.")?;
+            shell.error(error)?;
             std::process::exit(1);
         }
     };
@@ -119,9 +115,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
             "Detected",
             format!(
                 "NDK v{} ({}) [{}]",
-                ndk_version,
-                ndk_home.display(),
-                ndk_detection_method
+                ndk.version(),
+                ndk.path().display(),
+                ndk.source()
             ),
             termcolor::Color::Cyan,
         )
@@ -133,18 +129,13 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
 
     // Set up environment for cargo test build
     let triple = target.triple();
-    let clang_target = clang_target(triple, platform);
-
-    let env_vars = crate::cargo::build_env(
-        triple,
-        &ndk_home,
-        &ndk_version,
-        &clang_target,
-        platform,
-        &target.to_string(),
-        args.link_builtins,
-        args.link_cxx_shared,
-    );
+    let env_vars = BuildConfig::new(ndk, target, ApiLevel::new(platform))
+        .with_linker(cargo_ndk_executable_path()?)
+        .with_runner(cargo_ndk_runner_path()?)
+        .with_link_builtins(args.link_builtins)
+        .with_link_cxx_shared(args.link_cxx_shared)
+        .environment()?
+        .into_map();
 
     shell.verbose(|shell| {
         shell.status_with_color(
