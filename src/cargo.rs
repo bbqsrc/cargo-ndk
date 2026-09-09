@@ -268,7 +268,7 @@ pub(crate) fn build_env(
     }
 
     let bindgen_args = format!(
-        "--sysroot={} -I{}",
+        "{clang_target} --sysroot={} -I{}",
         cargo_ndk_sysroot_path.display(),
         extra_include
     );
@@ -471,6 +471,25 @@ mod tests {
         assert_eq!(env["CARGO_NDK_NDK_VERSION"], "28.0.0");
         assert_eq!(env["ANDROID_PLATFORM"], "28");
         assert_eq!(env["ANDROID_ABI"], "arm64-v8a");
+    }
+
+    #[test]
+    fn build_env_exports_versioned_bindgen_target_args() {
+        let env = build_env(
+            "aarch64-linux-android",
+            Path::new("/opt/android-ndk"),
+            &Version::new(28, 0, 0),
+            "--target=aarch64-linux-android28",
+            28,
+            "arm64-v8a",
+            false,
+            false,
+        );
+
+        let bindgen_clang_args =
+            env["BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android"].to_string_lossy();
+        assert!(bindgen_clang_args.contains("--target=aarch64-linux-android28"));
+        assert!(bindgen_clang_args.contains("--sysroot="));
     }
 
     #[test]
