@@ -690,11 +690,9 @@ pub fn run(args: Vec<String>) -> anyhow::Result<()> {
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     // Determine the package being built so we only copy its artifacts.
-    let current_package_id = match metadata
-        .packages
-        .iter()
-        .find(|p| p.manifest_path.as_std_path() == cargo_manifest)
-    {
+    let current_package_id = match metadata.packages.iter().find(|p| {
+        manifest_paths_match(&cargo_manifest, p.manifest_path.as_std_path(), &working_dir)
+    }) {
         Some(p) => p.id.clone(),
         None => {
             shell.error("Could not determine current package from manifest")?;
@@ -830,6 +828,19 @@ fn copyable_cdylib_artifacts<'a>(
         .filter(move |a| &a.package_id == current_package_id)
 }
 
+fn manifest_paths_match(manifest_path: &Path, candidate: &Path, working_dir: &Path) -> bool {
+    let manifest_path = if manifest_path.is_absolute() {
+        manifest_path.to_path_buf()
+    } else {
+        working_dir.join(manifest_path)
+    };
+
+    dunce::canonicalize(manifest_path)
+        .ok()
+        .zip(dunce::canonicalize(candidate).ok())
+        .is_some_and(|(manifest_path, candidate)| manifest_path == candidate)
+}
+
 /// Check if the source file has changed and should be copied over to the destination path.
 #[inline]
 fn is_fresh(src: &Path, dest: &Path) -> anyhow::Result<bool> {
@@ -855,10 +866,16 @@ fn is_fresh(src: &Path, dest: &Path) -> anyhow::Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        path::Path,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use cargo_metadata::Artifact;
     use serde_json::json;
 
-    use super::copyable_cdylib_artifacts;
+    use super::{copyable_cdylib_artifacts, manifest_paths_match};
 
     fn artifact(package_id: &str, crate_types: &[&str], filenames: &[&str]) -> Artifact {
         serde_json::from_value(json!({
@@ -914,5 +931,28 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(selected, vec![current_package_id.repr.as_str()]);
+    }
+
+    #[test]
+    fn manifest_paths_match_paths_with_parent_components() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before Unix epoch")
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("cargo-ndk-manifest-path-{nanos}"));
+        let working_dir = temp_dir.join("workspace");
+        let manifest_dir = temp_dir.join("package");
+        fs::create_dir_all(&working_dir).expect("failed to create workspace directory");
+        fs::create_dir_all(&manifest_dir).expect("failed to create package directory");
+        let manifest = manifest_dir.join("Cargo.toml");
+        fs::write(&manifest, "").expect("failed to create manifest");
+
+        assert!(manifest_paths_match(
+            Path::new("../package/Cargo.toml"),
+            &manifest,
+            &working_dir,
+        ));
+
+        fs::remove_dir_all(temp_dir).ok();
     }
 }
